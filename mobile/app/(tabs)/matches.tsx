@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { TrustBadge } from "@/components/trust/TrustBadge";
 import { Avatar } from "@/components/ui/Avatar";
@@ -23,16 +24,14 @@ import { useReceivedInterests } from "@/hooks/useMatching";
 import { formatCurrency, formatRelativeDate } from "@/lib/format";
 import api from "@/services/api";
 
-// ─── Tab definitions ────────────────────────────────────────────────────────
 type TabKey = "recommendations" | "inbox" | "connections";
 
 const TABS: { key: TabKey; label: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
-  { key: "recommendations", label: "Recommendations", icon: "heart" },
+  { key: "recommendations", label: "Discover", icon: "heart" },
   { key: "inbox", label: "Inbox", icon: "inbox" },
-  { key: "connections", label: "Connections", icon: "users" },
+  { key: "connections", label: "Connected", icon: "users" },
 ];
 
-// ─── Inbox filter chips ─────────────────────────────────────────────────────
 const INBOX_FILTERS = ["all", "new", "shortlisted", "accepted", "rejected"] as const;
 type InboxFilter = (typeof INBOX_FILTERS)[number];
 
@@ -43,12 +42,10 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   rejected: { bg: "bg-red-50", text: "text-red-600" },
 };
 
-// ─── Main screen ────────────────────────────────────────────────────────────
 export default function MatchesScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("recommendations");
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
 
-  // ── Recommendations data ────────────────────────────────────────────────
   const { data: recommendations, isLoading: recsLoading } = useQuery({
     queryKey: ["recommendations"],
     queryFn: async () => {
@@ -76,12 +73,10 @@ export default function MatchesScreen() {
     );
   };
 
-  // ── Inbox data (UH-301) ────────────────────────────────────────────────
   const { data: receivedInterests, isLoading: inboxLoading } = useReceivedInterests(
     inboxFilter === "all" ? undefined : inboxFilter,
   );
 
-  // ── Connections data ───────────────────────────────────────────────────
   const { data: connections, isLoading: connectionsLoading } = useQuery({
     queryKey: ["connections"],
     queryFn: async () => {
@@ -94,63 +89,58 @@ export default function MatchesScreen() {
 
   const handleChat = (interestId: string) => {
     createRoom.mutate(interestId, {
-      onSuccess: (room) => {
-        router.push(`/chat/${room.id}` as any);
-      },
+      onSuccess: (room) => router.push(`/chat/${room.id}` as any),
       onError: (err: any) =>
         Alert.alert("Error", err.response?.data?.detail || "Failed to open chat"),
     });
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <View className="flex-1 bg-slate-50">
-      {/* ── Segmented tab bar ──────────────────────────────────────────── */}
-      <View className="px-4 pt-3 pb-2">
-        <View className="flex-row bg-slate-100 rounded-xl p-1">
+      {/* Tab bar */}
+      <View className="bg-white px-4 pt-3 pb-0 border-b border-slate-100">
+        <View className="flex-row">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <TouchableOpacity
                 key={tab.key}
                 onPress={() => setActiveTab(tab.key)}
-                className={`flex-1 flex-row items-center justify-center gap-1.5 rounded-lg py-2.5 ${
-                  isActive ? "bg-white shadow-sm" : ""
-                }`}
+                className="flex-1 items-center pb-3"
+                style={{ borderBottomWidth: 2, borderBottomColor: isActive ? "#0ea5e9" : "transparent" }}
               >
-                <Feather
-                  name={tab.icon}
-                  size={14}
-                  color={isActive ? "#0ea5e9" : "#94a3b8"}
-                />
-                <Text
-                  className={`text-xs font-semibold ${
-                    isActive ? "text-primary-600" : "text-slate-400"
-                  }`}
-                >
-                  {tab.label}
-                </Text>
-                {tab.key === "inbox" && receivedInterests && receivedInterests.length > 0 && (
-                  <View className="bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
-                    <Text className="text-white text-[10px] font-bold">
-                      {receivedInterests.length}
-                    </Text>
-                  </View>
-                )}
-                {tab.key === "connections" && connections && connections.length > 0 && (
-                  <View className="bg-primary-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
-                    <Text className="text-white text-[10px] font-bold">
-                      {connections.length}
-                    </Text>
-                  </View>
-                )}
+                <View className="flex-row items-center gap-1.5">
+                  <Feather name={tab.icon} size={15} color={isActive ? "#0ea5e9" : "#94a3b8"} />
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isActive ? "text-primary-600" : "text-slate-400"
+                    }`}
+                  >
+                    {tab.label}
+                  </Text>
+                  {tab.key === "inbox" &&
+                    receivedInterests &&
+                    receivedInterests.length > 0 && (
+                      <View className="bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
+                        <Text className="text-white text-[10px] font-bold">
+                          {receivedInterests.length}
+                        </Text>
+                      </View>
+                    )}
+                  {tab.key === "connections" && connections && connections.length > 0 && (
+                    <View className="bg-primary-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
+                      <Text className="text-white text-[10px] font-bold">
+                        {connections.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
               </TouchableOpacity>
             );
           })}
         </View>
       </View>
 
-      {/* ── Tab content ────────────────────────────────────────────────── */}
       {activeTab === "recommendations" && (
         <RecommendationsTab
           recommendations={recommendations}
@@ -182,7 +172,7 @@ export default function MatchesScreen() {
   );
 }
 
-// ─── Recommendations Tab ────────────────────────────────────────────────────
+/* ── Recommendations: full-width image cards ── */
 function RecommendationsTab({
   recommendations,
   isLoading,
@@ -208,64 +198,108 @@ function RecommendationsTab({
     <FlatList
       data={recommendations || []}
       keyExtractor={(item) => item.listing_id}
-      contentContainerStyle={{ padding: 16 }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       renderItem={({ item }) => {
         const sent = myInterests?.some(
           (i: { to_listing_id: string | null }) => i.to_listing_id === item.listing_id,
         );
+        const matchScore = Math.round(item.compatibility?.total_score ?? 0);
         return (
-          <Card className="mb-3">
-            <View className="flex-row">
-              <View className="w-24 h-24 bg-slate-200 rounded-xl overflow-hidden mr-3">
-                {item.images && item.images.length > 0 ? (
-                  <Image source={{ uri: item.images[0] }} className="w-full h-full" />
-                ) : (
-                  <View className="flex-1 items-center justify-center">
-                    <Feather name="home" size={24} color="#94a3b8" />
+          <View
+            className="mb-4 rounded-3xl overflow-hidden bg-white"
+            style={{
+              shadowColor: "#0f172a",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.08,
+              shadowRadius: 16,
+              elevation: 5,
+            }}
+          >
+            {/* Image */}
+            <View className="h-48 bg-slate-200">
+              {item.images && item.images.length > 0 ? (
+                <Image
+                  source={{ uri: item.images[0] }}
+                  className="w-full h-full"
+                  resizeMode="cover"
+                />
+              ) : (
+                <View className="flex-1 items-center justify-center bg-slate-100">
+                  <Feather name="home" size={36} color="#94a3b8" />
+                </View>
+              )}
+
+              {/* Gradient overlay */}
+              <View className="absolute bottom-0 left-0 right-0 h-24">
+                <Svg
+                  style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                  width="100%"
+                  height="100%"
+                  preserveAspectRatio="none"
+                >
+                  <Defs>
+                    <LinearGradient id="recGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+                      <Stop offset="0" stopColor="#000" stopOpacity="0" />
+                      <Stop offset="1" stopColor="#000" stopOpacity="0.65" />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect width="100%" height="100%" fill="url(#recGrad)" />
+                </Svg>
+                <View className="absolute bottom-0 left-0 right-0 px-4 pb-3 flex-row justify-between items-end">
+                  <View>
+                    <Text className="text-white text-lg font-bold">
+                      {formatCurrency(item.rent_monthly)}/mo
+                    </Text>
+                    <Text className="text-white/75 text-sm" numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                  </View>
+                  <View className="bg-emerald-500 rounded-full px-3 py-1">
+                    <Text className="text-white text-sm font-bold">{matchScore}% Match</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Details row */}
+            <View className="px-4 py-3 flex-row items-center justify-between">
+              <View className="flex-row items-center gap-3">
+                <View className="flex-row items-center gap-1">
+                  <Feather name="map-pin" size={13} color="#64748b" />
+                  <Text className="text-slate-500 text-sm">{item.city}</Text>
+                </View>
+                {item.compatibility?.reasons?.[0] && (
+                  <View className="bg-primary-50 rounded-full px-2.5 py-1">
+                    <Text className="text-primary-600 text-xs font-medium">
+                      {item.compatibility.reasons[0]}
+                    </Text>
                   </View>
                 )}
               </View>
 
-              <View className="flex-1">
-                <Text className="font-bold text-slate-900 text-base" numberOfLines={1}>
-                  {item.title}
+              <TouchableOpacity
+                onPress={() => onInterest(item.listing_id)}
+                disabled={sent || expressInterest.isPending}
+                className={`rounded-2xl px-4 py-2 flex-row items-center gap-1.5 ${
+                  sent ? "bg-slate-100" : "bg-primary-500"
+                }`}
+                activeOpacity={0.85}
+              >
+                <Feather
+                  name={sent ? "check" : "heart"}
+                  size={14}
+                  color={sent ? "#64748b" : "#fff"}
+                />
+                <Text
+                  className={`text-sm font-semibold ${
+                    sent ? "text-slate-500" : "text-white"
+                  }`}
+                >
+                  {sent ? "Sent" : "Interested"}
                 </Text>
-                <Text className="text-slate-500 text-sm">{item.city}</Text>
-
-                <View className="flex-row items-center gap-3 mt-1">
-                  <Text className="font-bold text-primary-600">
-                    {formatCurrency(item.rent_monthly)}/mo
-                  </Text>
-                  <View className="bg-green-50 rounded-full px-2 py-0.5">
-                    <Text className="text-green-600 text-xs font-bold">
-                      {Math.round(item.compatibility.total_score)}% Match
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="flex-row gap-2 mt-2">
-                  <TouchableOpacity
-                    onPress={() => onInterest(item.listing_id)}
-                    disabled={sent || expressInterest.isPending}
-                    className={`rounded-lg px-3 py-1.5 flex-row items-center gap-1 ${
-                      sent ? "bg-slate-200" : "bg-primary-500"
-                    }`}
-                  >
-                    <Feather
-                      name={sent ? "check" : "heart"}
-                      size={12}
-                      color={sent ? "#64748b" : "#fff"}
-                    />
-                    <Text
-                      className={`text-xs font-medium ${sent ? "text-slate-500" : "text-white"}`}
-                    >
-                      {sent ? "Sent" : "Interested"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
+              </TouchableOpacity>
             </View>
-          </Card>
+          </View>
         );
       }}
       ListEmptyComponent={
@@ -281,7 +315,7 @@ function RecommendationsTab({
   );
 }
 
-// ─── Inbox Tab (UH-301) ────────────────────────────────────────────────────
+/* ── Inbox tab ── */
 function InboxTab({
   interests,
   isLoading,
@@ -295,11 +329,10 @@ function InboxTab({
 }) {
   return (
     <View className="flex-1">
-      {/* Filter chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}
       >
         {INBOX_FILTERS.map((f) => {
           const isActive = filter === f;
@@ -350,45 +383,36 @@ function InboxTab({
 
 function InboxCard({ interest }: { interest: InterestDetail }) {
   const statusStyle = STATUS_COLORS[interest.status] || STATUS_COLORS.new;
-
   return (
     <Card className="mb-3">
       <View className="flex-row items-start">
-        {/* Avatar */}
         <View className="mr-3">
           <Avatar uri={interest.applicant_avatar} name={interest.applicant_name} size={48} />
         </View>
-
-        {/* Content */}
         <View className="flex-1">
-          {/* Header row: name + timestamp */}
           <View className="flex-row items-center justify-between">
             <Text className="font-bold text-slate-900 text-base" numberOfLines={1}>
               {interest.applicant_name}
             </Text>
-            <Text className="text-slate-400 text-xs">{formatRelativeDate(interest.created_at)}</Text>
+            <Text className="text-slate-400 text-xs">
+              {formatRelativeDate(interest.created_at)}
+            </Text>
           </View>
-
-          {/* Trust + compatibility row */}
-          <View className="flex-row items-center gap-3 mt-1">
+          <View className="flex-row items-center gap-2 mt-1">
             <TrustBadge score={interest.applicant_trust_score} size="sm" />
             {interest.compatibility_score != null && (
-              <View className="bg-green-50 rounded-full px-2 py-0.5">
-                <Text className="text-green-600 text-xs font-bold">
+              <View className="bg-emerald-50 rounded-full px-2 py-0.5">
+                <Text className="text-emerald-600 text-xs font-bold">
                   {Math.round(interest.compatibility_score)}% Match
                 </Text>
               </View>
             )}
           </View>
-
-          {/* Message preview */}
           {interest.message && (
             <Text className="text-slate-500 text-sm mt-1.5" numberOfLines={2}>
               {interest.message}
             </Text>
           )}
-
-          {/* Footer: listing context + status badge */}
           <View className="flex-row items-center justify-between mt-2">
             {interest.listing_title && (
               <View className="flex-row items-center gap-1 flex-1 mr-2">
@@ -410,7 +434,7 @@ function InboxCard({ interest }: { interest: InterestDetail }) {
   );
 }
 
-// ─── Connections Tab ────────────────────────────────────────────────────────
+/* ── Connections tab ── */
 function ConnectionsTab({
   connections,
   isLoading,
@@ -438,28 +462,23 @@ function ConnectionsTab({
       renderItem={({ item }) => (
         <Card className="mb-3">
           <View className="flex-row items-center">
-            {/* Avatar */}
             <View className="mr-3">
-              <Avatar uri={item.applicant_avatar} name={item.applicant_name} size={48} />
+              <Avatar uri={item.applicant_avatar} name={item.applicant_name} size={52} />
             </View>
-
-            {/* Info */}
             <View className="flex-1">
               <Text className="font-bold text-slate-900 text-base" numberOfLines={1}>
                 {item.applicant_name}
               </Text>
-
-              <View className="flex-row items-center gap-2 mt-0.5">
+              <View className="flex-row items-center gap-2 mt-1">
                 <TrustBadge score={item.applicant_trust_score} size="sm" showLabel={false} />
                 {item.compatibility_score != null && (
-                  <View className="bg-green-50 rounded-full px-2 py-0.5">
-                    <Text className="text-green-600 text-xs font-bold">
+                  <View className="bg-emerald-50 rounded-full px-2 py-0.5">
+                    <Text className="text-emerald-600 text-xs font-bold">
                       {Math.round(item.compatibility_score)}% Match
                     </Text>
                   </View>
                 )}
               </View>
-
               {item.listing_title && (
                 <View className="flex-row items-center gap-1 mt-1">
                   <Feather name="home" size={12} color="#94a3b8" />
@@ -469,12 +488,11 @@ function ConnectionsTab({
                 </View>
               )}
             </View>
-
-            {/* Chat button */}
             <TouchableOpacity
               onPress={() => onChat(item.id)}
               disabled={isChatLoading}
-              className="bg-primary-500 rounded-xl px-4 py-2.5 flex-row items-center gap-1.5"
+              className="bg-primary-500 rounded-2xl px-4 py-2.5 flex-row items-center gap-1.5"
+              activeOpacity={0.85}
             >
               {isChatLoading ? (
                 <ActivityIndicator size="small" color="#fff" />

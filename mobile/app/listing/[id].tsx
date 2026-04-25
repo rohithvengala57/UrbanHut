@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import {
@@ -12,6 +13,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { TrustBadge } from "@/components/trust/TrustBadge";
 import { Badge } from "@/components/ui/Badge";
@@ -21,7 +23,6 @@ import { useExpressInterest, useListing, useMyInterests } from "@/hooks/useListi
 import { useSavedListings, useToggleSave } from "@/hooks/useSaved";
 import { formatCurrency } from "@/lib/format";
 import { useAuthStore } from "@/stores/authStore";
-import { useQuery } from "@tanstack/react-query";
 import api from "@/services/api";
 
 export default function ListingDetailScreen() {
@@ -34,7 +35,6 @@ export default function ListingDetailScreen() {
   const { data: savedListings } = useSavedListings();
   const toggleSave = useToggleSave();
 
-  // UH-203: Roommate Summary
   const { data: roommateSummary } = useQuery({
     queryKey: ["roommate-summary", id],
     queryFn: async () => {
@@ -63,7 +63,8 @@ export default function ListingDetailScreen() {
     expressInterest.mutate(
       { to_listing_id: id },
       {
-        onSuccess: () => Alert.alert("Interest Sent!", "The host will be notified of your interest."),
+        onSuccess: () =>
+          Alert.alert("Interest Sent!", "The host will be notified of your interest."),
         onError: (err: any) =>
           Alert.alert("Error", err.response?.data?.detail || "Failed to send interest"),
       }
@@ -72,7 +73,7 @@ export default function ListingDetailScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center">
+      <View className="flex-1 items-center justify-center bg-white">
         <ActivityIndicator size="large" color="#0ea5e9" />
       </View>
     );
@@ -95,52 +96,18 @@ export default function ListingDetailScreen() {
   const locationLabel = `${listing.city}, ${listing.state} ${listing.zip_code}`;
   const occupancyLabel = `${listing.current_occupants}/${listing.available_spots + listing.current_occupants}`;
 
+  const highlights = [
+    listing.utilities_included && "Utilities included",
+    listing.nearest_transit && `Near ${listing.nearest_transit}`,
+    listing.pet_policy === "allowed" && "Pet friendly",
+    listing.parking_available && "Parking available",
+  ].filter(Boolean) as string[];
+
   return (
-    <View className="flex-1 bg-white">
-      <ScrollView className="flex-1">
-        {/* Host Banner */}
-        {isHost && (
-          <View className="bg-primary-50 px-4 py-2.5 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <Feather name="info" size={14} color="#0ea5e9" />
-              <Text className="text-primary-700 text-sm font-medium">You own this listing</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push(`/listing/manage/${id}` as any)}
-              className="bg-primary-500 rounded-full px-3 py-1"
-            >
-              <Text className="text-white text-xs font-semibold">Manage</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Save button row (seekers only) */}
-        {!isHost && (
-          <View className="px-4 pt-3 pb-1 flex-row justify-end">
-            <TouchableOpacity
-              onPress={handleToggleSave}
-              className={`flex-row items-center gap-1.5 rounded-full px-3 py-1.5 border ${
-                isSaved ? "bg-amber-50 border-amber-300" : "bg-white border-slate-200"
-              }`}
-            >
-              <Feather
-                name={isSaved ? "bookmark" : "bookmark"}
-                size={14}
-                color={isSaved ? "#f59e0b" : "#94a3b8"}
-              />
-              <Text
-                className={`text-xs font-semibold ${
-                  isSaved ? "text-amber-600" : "text-slate-400"
-                }`}
-              >
-                {isSaved ? "Saved" : "Save"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Image Carousel */}
-        <View className="h-64 bg-slate-200">
+    <View className="flex-1 bg-slate-50">
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        {/* ── Hero image ── */}
+        <View style={{ height: 320 }} className="bg-slate-200">
           {listing.images && listing.images.length > 0 ? (
             <FlatList
               data={listing.images}
@@ -149,71 +116,263 @@ export default function ListingDetailScreen() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={(_, i) => String(i)}
               renderItem={({ item }) => (
-                <Image source={{ uri: item }} style={{ width, height: 256 }} resizeMode="cover" />
+                <Image
+                  source={{ uri: item }}
+                  style={{ width, height: 320 }}
+                  resizeMode="cover"
+                />
               )}
             />
           ) : (
-            <View className="flex-1 items-center justify-center">
+            <View className="flex-1 items-center justify-center bg-slate-100">
               <Feather name="image" size={48} color="#94a3b8" />
             </View>
           )}
+
+          {/* Bottom gradient */}
+          <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 140 }}>
+            <Svg
+              style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+              width="100%"
+              height="100%"
+              preserveAspectRatio="none"
+            >
+              <Defs>
+                <LinearGradient id="detailGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+                  <Stop offset="0" stopColor="#000" stopOpacity="0" />
+                  <Stop offset="1" stopColor="#000" stopOpacity="0.75" />
+                </LinearGradient>
+              </Defs>
+              <Rect width="100%" height="100%" fill="url(#detailGrad)" />
+            </Svg>
+
+            {/* Price overlay on image */}
+            <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 16 }}>
+              <Text style={{ color: "#fff", fontSize: 30, fontWeight: "800" }}>
+                {formatCurrency(listing.rent_monthly)}
+                <Text style={{ fontSize: 16, fontWeight: "400", opacity: 0.8 }}>/mo</Text>
+              </Text>
+              <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 14 }} numberOfLines={1}>
+                {listing.title}
+              </Text>
+            </View>
+
+            {/* Top-right actions */}
+            <View style={{ position: "absolute", top: -280, right: 12, flexDirection: "row", gap: 8 }}>
+              {!isHost && (
+                <TouchableOpacity
+                  onPress={handleToggleSave}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "rgba(255,255,255,0.9)",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Feather
+                    name="bookmark"
+                    size={18}
+                    color={isSaved ? "#f59e0b" : "#64748b"}
+                  />
+                </TouchableOpacity>
+              )}
+              {listing.is_verified && (
+                <View
+                  style={{
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#0ea5e9",
+                    paddingHorizontal: 12,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexDirection: "row",
+                    gap: 4,
+                  }}
+                >
+                  <Feather name="check-circle" size={13} color="#fff" />
+                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Verified</Text>
+                </View>
+              )}
+            </View>
+          </View>
         </View>
 
-        <View className="p-4">
-          {/* Price & Type */}
-          <View className="flex-row justify-between items-start mb-2">
-            <View>
-              <Text className="text-3xl font-bold text-slate-900">
-                {formatCurrency(listing.rent_monthly)}
-                <Text className="text-lg font-normal text-slate-500">/mo</Text>
+        <View className="px-4 pt-4">
+          {/* Host banner */}
+          {isHost && (
+            <View className="bg-primary-50 rounded-2xl px-4 py-3 flex-row items-center justify-between mb-4">
+              <View className="flex-row items-center gap-2">
+                <Feather name="info" size={14} color="#0ea5e9" />
+                <Text className="text-primary-700 text-sm font-medium">You own this listing</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => router.push(`/listing/manage/${id}` as any)}
+                className="bg-primary-500 rounded-xl px-3 py-1.5"
+              >
+                <Text className="text-white text-xs font-semibold">Manage</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Location + type row */}
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center gap-1.5 flex-1">
+              <Feather name="map-pin" size={14} color="#64748b" />
+              <Text className="text-slate-500 text-sm flex-1" numberOfLines={1}>
+                {locationLabel}
               </Text>
-              {listing.security_deposit && (
-                <Text className="text-sm text-slate-500">
-                  {formatCurrency(listing.security_deposit)} deposit
-                </Text>
-              )}
             </View>
             <Badge label={roomTypeLabels[listing.room_type] || listing.room_type} size="md" />
           </View>
 
-          <Text className="text-xl font-bold text-slate-900 mb-1">{listing.title}</Text>
-          <View className="flex-row items-center gap-1 mb-4">
-            <Feather name="map-pin" size={14} color="#64748b" />
-            <Text className="text-slate-500">{locationLabel}</Text>
-          </View>
+          {/* Highlights */}
+          {highlights.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4">
+              <View className="flex-row gap-2">
+                {highlights.map((h) => (
+                  <View key={h} className="flex-row items-center gap-1.5 bg-emerald-50 rounded-full px-3 py-1.5">
+                    <Feather name="check" size={12} color="#10b981" />
+                    <Text className="text-emerald-700 text-xs font-medium">{h}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          )}
 
-          {/* Quick Stats */}
-          <View className="flex-row gap-4 mb-4">
-            <View className="bg-slate-50 rounded-xl px-4 py-3 flex-1 items-center">
-              <Feather name="grid" size={18} color="#0ea5e9" />
-              <Text className="text-sm font-bold text-slate-900 mt-1">{listing.total_bedrooms}</Text>
-              <Text className="text-xs text-slate-500">Bedrooms</Text>
-            </View>
-            <View className="bg-slate-50 rounded-xl px-4 py-3 flex-1 items-center">
-              <Feather name="droplet" size={18} color="#0ea5e9" />
-              <Text className="text-sm font-bold text-slate-900 mt-1">{listing.total_bathrooms}</Text>
-              <Text className="text-xs text-slate-500">Bathrooms</Text>
-            </View>
-            <View className="bg-slate-50 rounded-xl px-4 py-3 flex-1 items-center">
-              <Feather name="users" size={18} color="#0ea5e9" />
-              <Text className="text-sm font-bold text-slate-900 mt-1">{occupancyLabel}</Text>
-              <Text className="text-xs text-slate-500">Occupants</Text>
-            </View>
+          {/* Quick stats */}
+          <View className="flex-row gap-3 mb-4">
+            {[
+              { icon: "grid" as const, value: String(listing.total_bedrooms), label: "Bedrooms" },
+              { icon: "droplet" as const, value: String(listing.total_bathrooms), label: "Bathrooms" },
+              { icon: "users" as const, value: occupancyLabel, label: "Occupants" },
+            ].map((stat) => (
+              <View
+                key={stat.label}
+                className="flex-1 bg-white rounded-2xl px-3 py-3 items-center"
+                style={{
+                  shadowColor: "#0f172a",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+              >
+                <Feather name={stat.icon} size={18} color="#0ea5e9" />
+                <Text className="text-sm font-bold text-slate-900 mt-1">{stat.value}</Text>
+                <Text className="text-xs text-slate-400">{stat.label}</Text>
+              </View>
+            ))}
+            {listing.security_deposit != null && (
+              <View
+                className="flex-1 bg-white rounded-2xl px-3 py-3 items-center"
+                style={{
+                  shadowColor: "#0f172a",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.05,
+                  shadowRadius: 6,
+                  elevation: 2,
+                }}
+              >
+                <Feather name="shield" size={18} color="#0ea5e9" />
+                <Text className="text-sm font-bold text-slate-900 mt-1">
+                  {formatCurrency(listing.security_deposit)}
+                </Text>
+                <Text className="text-xs text-slate-400">Deposit</Text>
+              </View>
+            )}
           </View>
 
           {/* Description */}
           <Card className="mb-4">
             <Text className="font-bold text-slate-900 mb-2">About</Text>
-            <Text className="text-slate-600 leading-5">{listing.description}</Text>
+            <Text className="text-slate-600 leading-6">{listing.description}</Text>
           </Card>
+
+          {/* Roommate Summary with trust */}
+          {roommateSummary &&
+            (roommateSummary.household_size > 0 || roommateSummary.occupants?.length > 0) && (
+              <Card className="mb-4">
+                <View className="flex-row items-center justify-between mb-3">
+                  <Text className="font-bold text-slate-900">Current Roommates</Text>
+                  {roommateSummary.avg_trust_score > 0 && (
+                    <View className="flex-row items-center gap-1.5 bg-primary-50 rounded-full px-3 py-1">
+                      <Feather name="shield" size={12} color="#0ea5e9" />
+                      <Text className="text-xs text-primary-600 font-bold">
+                        Avg {Math.round(roommateSummary.avg_trust_score)} trust
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View className="flex-row gap-3 mb-3">
+                  <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
+                    <Text className="text-sm font-bold text-slate-900">
+                      {roommateSummary.household_size}
+                    </Text>
+                    <Text className="text-xs text-slate-500">Current</Text>
+                  </View>
+                  <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
+                    <Text className="text-sm font-bold text-slate-900">
+                      {roommateSummary.available_spots}
+                    </Text>
+                    <Text className="text-xs text-slate-500">Open Spots</Text>
+                  </View>
+                </View>
+
+                {roommateSummary.occupants?.map((occ: any, idx: number) => {
+                  const occupantLabel = String(occ.label || String.fromCharCode(65 + idx));
+                  const lifestyleSummary =
+                    occ.lifestyle_tags?.length > 0
+                      ? occ.lifestyle_tags.slice(0, 3).join(" · ")
+                      : null;
+                  return (
+                    <View
+                      key={`${occupantLabel}-${idx}`}
+                      className={`flex-row items-center justify-between py-3 ${
+                        idx > 0 ? "border-t border-slate-100" : ""
+                      }`}
+                    >
+                      <View className="flex-row items-center gap-2.5">
+                        <View className="w-9 h-9 bg-primary-100 rounded-full items-center justify-center">
+                          <Text className="text-xs font-bold text-primary-600">{occupantLabel}</Text>
+                        </View>
+                        <View>
+                          <Text className="text-sm font-semibold text-slate-800">
+                            Roommate {occupantLabel}
+                          </Text>
+                          {lifestyleSummary && (
+                            <Text className="text-xs text-slate-400">{lifestyleSummary}</Text>
+                          )}
+                        </View>
+                      </View>
+                      <View className="items-end gap-1">
+                        <View className="bg-primary-50 rounded-full px-2.5 py-0.5">
+                          <Text className="text-xs text-primary-600 font-semibold">
+                            {occ.trust_band}
+                          </Text>
+                        </View>
+                        {occ.tenure_months && (
+                          <Text className="text-xs text-slate-400">
+                            {occ.tenure_months}mo
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </Card>
+            )}
 
           {/* Amenities */}
           {listing.amenities && listing.amenities.length > 0 && (
             <Card className="mb-4">
-              <Text className="font-bold text-slate-900 mb-2">Amenities</Text>
+              <Text className="font-bold text-slate-900 mb-3">Amenities</Text>
               <View className="flex-row flex-wrap gap-2">
                 {listing.amenities.map((a: string) => (
-                  <View key={a} className="bg-primary-50 rounded-full px-3 py-1.5">
+                  <View key={a} className="bg-primary-50 rounded-full px-3 py-1.5 flex-row items-center gap-1">
+                    <Feather name="check" size={11} color="#0ea5e9" />
                     <Text className="text-primary-700 text-sm">{a.replace(/_/g, " ")}</Text>
                   </View>
                 ))}
@@ -226,9 +385,11 @@ export default function ListingDetailScreen() {
             <Card className="mb-4">
               <Text className="font-bold text-slate-900 mb-2">House Rules</Text>
               {listing.house_rules.map((rule: string) => (
-                <View key={rule} className="flex-row items-center gap-2 mb-1.5">
-                  <Feather name="alert-circle" size={14} color="#f59e0b" />
-                  <Text className="text-slate-600 text-sm">{rule.replace(/_/g, " ")}</Text>
+                <View key={rule} className="flex-row items-center gap-2 mb-2">
+                  <View className="w-5 h-5 bg-amber-50 rounded-full items-center justify-center">
+                    <Feather name="alert-circle" size={12} color="#f59e0b" />
+                  </View>
+                  <Text className="text-slate-600 text-sm flex-1">{rule.replace(/_/g, " ")}</Text>
                 </View>
               ))}
             </Card>
@@ -237,91 +398,53 @@ export default function ListingDetailScreen() {
           {/* Transit */}
           {listing.nearest_transit && (
             <Card className="mb-4">
-              <Text className="font-bold text-slate-900 mb-2">Transit</Text>
-              <View className="flex-row items-center gap-2">
-                <Feather name="navigation" size={16} color="#0ea5e9" />
-                <Text className="text-slate-600">
-                  {listing.nearest_transit}
-                  {listing.transit_walk_mins && ` - ${listing.transit_walk_mins} min walk`}
-                </Text>
-              </View>
-            </Card>
-          )}
-
-          {/* UH-203: Roommate Summary */}
-          {roommateSummary && (roommateSummary.household_size > 0 || roommateSummary.occupants?.length > 0) && (
-            <Card className="mb-4">
-              <Text className="font-bold text-slate-900 mb-3">Current Roommates</Text>
-              <View className="flex-row gap-3 mb-3">
-                <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
-                  <Text className="text-sm font-bold text-slate-900">{roommateSummary.household_size}</Text>
-                  <Text className="text-xs text-slate-500">Current</Text>
+              <View className="flex-row items-center gap-3">
+                <View className="w-10 h-10 bg-primary-50 rounded-xl items-center justify-center">
+                  <Feather name="navigation" size={18} color="#0ea5e9" />
                 </View>
-                <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
-                  <Text className="text-sm font-bold text-slate-900">{roommateSummary.available_spots}</Text>
-                  <Text className="text-xs text-slate-500">Open Spots</Text>
+                <View>
+                  <Text className="font-semibold text-slate-900">{listing.nearest_transit}</Text>
+                  {listing.transit_walk_mins && (
+                    <Text className="text-slate-400 text-sm">
+                      {listing.transit_walk_mins} min walk
+                    </Text>
+                  )}
                 </View>
-                {roommateSummary.avg_trust_score > 0 && (
-                  <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
-                    <Text className="text-sm font-bold text-primary-600">{Math.round(roommateSummary.avg_trust_score)}</Text>
-                    <Text className="text-xs text-slate-500">Avg Trust</Text>
-                  </View>
-                )}
               </View>
-              {roommateSummary.occupants?.map((occ: any, idx: number) => {
-                const occupantLabel = String(occ.label || String.fromCharCode(65 + idx));
-                const occupantTitle = `Roommate ${occupantLabel}`;
-                const lifestyleSummary =
-                  occ.lifestyle_tags?.length > 0 ? occ.lifestyle_tags.slice(0, 3).join(" · ") : null;
-                const tenureSummary =
-                  occ.tenure_months ? `${occ.tenure_months}mo tenure` : null;
-
-                return (
-                  <View
-                    key={`${occupantLabel}-${idx}`}
-                    className={`flex-row items-center justify-between py-2.5 ${idx > 0 ? "border-t border-slate-100" : ""}`}
-                  >
-                    <View className="flex-row items-center gap-2">
-                      <View className="w-8 h-8 bg-primary-100 rounded-full items-center justify-center">
-                        <Text className="text-xs font-bold text-primary-600">{occupantLabel}</Text>
-                      </View>
-                      <View>
-                        <Text className="text-sm font-medium text-slate-800">{occupantTitle}</Text>
-                        {lifestyleSummary && (
-                          <Text className="text-xs text-slate-400">{lifestyleSummary}</Text>
-                        )}
-                      </View>
-                    </View>
-                    <View className="items-end">
-                      <View className="bg-primary-50 rounded-full px-2 py-0.5">
-                        <Text className="text-xs text-primary-600 font-medium">{occ.trust_band}</Text>
-                      </View>
-                      {tenureSummary && (
-                        <Text className="text-xs text-slate-400 mt-0.5">{tenureSummary}</Text>
-                      )}
-                    </View>
-                  </View>
-                );
-              })}
             </Card>
           )}
 
           {/* Utilities */}
           <Card className="mb-6">
-            <Text className="font-bold text-slate-900 mb-2">Utilities</Text>
-            <Text className="text-slate-600">
-              {listing.utilities_included
-                ? "Included in rent"
-                : listing.utility_estimate
-                  ? `Estimated ${formatCurrency(listing.utility_estimate)}/mo`
-                  : "Not included (estimate unavailable)"}
-            </Text>
+            <View className="flex-row items-center gap-3">
+              <View className="w-10 h-10 bg-emerald-50 rounded-xl items-center justify-center">
+                <Feather name="zap" size={18} color="#22c55e" />
+              </View>
+              <View>
+                <Text className="font-semibold text-slate-900">Utilities</Text>
+                <Text className="text-slate-500 text-sm">
+                  {listing.utilities_included
+                    ? "Included in rent"
+                    : listing.utility_estimate
+                      ? `~${formatCurrency(listing.utility_estimate)}/mo estimate`
+                      : "Not included"}
+                </Text>
+              </View>
+            </View>
           </Card>
         </View>
       </ScrollView>
 
       {/* Bottom CTA */}
-      <View className="px-4 py-4 bg-white border-t border-slate-100">
+      <View
+        className="px-4 py-4 bg-white border-t border-slate-100"
+        style={{
+          shadowColor: "#0f172a",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+        }}
+      >
         {isHost ? (
           <Button
             title="Manage Listing"

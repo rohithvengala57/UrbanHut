@@ -11,10 +11,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { ChoresTab } from "@/components/household/ChoresTab";
 import { ExpensesTab } from "@/components/household/ExpensesTab";
 import { Avatar } from "@/components/ui/Avatar";
+import { ActionTile } from "@/components/ui/ActionTile";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -48,7 +50,8 @@ export default function HouseholdScreen() {
   const joinHousehold = useJoinHousehold();
   const generateInvite = useGenerateInvite();
 
-  const memberList: Array<{ id: string; full_name: string; avatar_url?: string }> = members || [];
+  const memberList: Array<{ id: string; full_name: string; avatar_url?: string }> =
+    members || [];
 
   const handleCreate = () => {
     if (!householdName.trim()) {
@@ -86,9 +89,11 @@ export default function HouseholdScreen() {
   const handleGenerateInvite = () => {
     generateInvite.mutate(undefined, {
       onSuccess: (data) =>
-        Alert.alert("Invite Code", `Share this code with your roommates:\n\n${data.invite_code}`, [
-          { text: "OK" },
-        ]),
+        Alert.alert(
+          "Invite Code",
+          `Share this code with your roommates:\n\n${data.invite_code}`,
+          [{ text: "OK" }]
+        ),
       onError: (err: any) =>
         Alert.alert("Error", err.response?.data?.detail || "Failed to generate invite"),
     });
@@ -106,14 +111,28 @@ export default function HouseholdScreen() {
     return (
       <View className="flex-1 bg-slate-50">
         <View className="flex-1 items-center justify-center px-6">
-          <Feather name="users" size={64} color="#cbd5e1" />
-          <Text className="text-xl font-bold text-slate-900 mt-4">No Household Yet</Text>
+          <View className="w-20 h-20 rounded-3xl bg-primary-50 items-center justify-center mb-4">
+            <Feather name="users" size={36} color="#0ea5e9" />
+          </View>
+          <Text className="text-2xl font-bold text-slate-900">No Household Yet</Text>
           <Text className="text-slate-500 text-center mt-2">
             Create a household or join one with an invite code.
           </Text>
-          <View className="flex-row gap-3 mt-6">
-            <Button title="Create" onPress={() => setShowCreateModal(true)} variant="primary" />
-            <Button title="Join" onPress={() => setShowJoinModal(true)} variant="outline" />
+          <View className="flex-row gap-3 mt-8">
+            <TouchableOpacity
+              onPress={() => setShowCreateModal(true)}
+              className="flex-1 bg-primary-500 rounded-2xl py-4 items-center"
+              activeOpacity={0.85}
+            >
+              <Text className="text-white font-bold text-base">Create</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowJoinModal(true)}
+              className="flex-1 border-2 border-primary-500 rounded-2xl py-4 items-center"
+              activeOpacity={0.85}
+            >
+              <Text className="text-primary-600 font-bold text-base">Join</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -143,7 +162,12 @@ export default function HouseholdScreen() {
                 onChangeText={setMaxMembers}
                 keyboardType="numeric"
               />
-              <Button title="Create Household" onPress={handleCreate} loading={createHousehold.isPending} size="lg" />
+              <Button
+                title="Create Household"
+                onPress={handleCreate}
+                loading={createHousehold.isPending}
+                size="lg"
+              />
             </View>
           </View>
         </Modal>
@@ -167,7 +191,12 @@ export default function HouseholdScreen() {
                 autoCorrect={false}
                 autoFocus
               />
-              <Button title="Join Household" onPress={handleJoin} loading={joinHousehold.isPending} size="lg" />
+              <Button
+                title="Join Household"
+                onPress={handleJoin}
+                loading={joinHousehold.isPending}
+                size="lg"
+              />
             </View>
           </View>
         </Modal>
@@ -182,16 +211,20 @@ export default function HouseholdScreen() {
     { key: "services", label: "Services", icon: "tool" },
   ];
 
+  // Find my balance
+  const myBalance = balances?.find((b) => (b as any).user_id === currentUser?.id);
+  const netBalance = (myBalance as any)?.net_balance ?? 0;
+
   return (
     <View className="flex-1 bg-slate-50">
-      {/* Top tab bar */}
+      {/* Tab bar */}
       <View className="bg-white border-b border-slate-100">
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="px-2">
           {tabs.map((tab) => (
             <TouchableOpacity
               key={tab.key}
               onPress={() => setActiveTab(tab.key)}
-              className={`flex-row items-center gap-1.5 px-4 py-3 mr-1 border-b-2 ${
+              className={`flex-row items-center gap-1.5 px-4 py-3.5 mr-1 border-b-2 ${
                 activeTab === tab.key ? "border-primary-500" : "border-transparent"
               }`}
             >
@@ -201,7 +234,7 @@ export default function HouseholdScreen() {
                 color={activeTab === tab.key ? "#0ea5e9" : "#94a3b8"}
               />
               <Text
-                className={`text-sm font-medium ${
+                className={`text-sm font-semibold ${
                   activeTab === tab.key ? "text-primary-500" : "text-slate-500"
                 }`}
               >
@@ -212,92 +245,153 @@ export default function HouseholdScreen() {
         </ScrollView>
       </View>
 
-      {/* Tab content */}
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ padding: 16 }}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── OVERVIEW ─────────────────────────────────── */}
+        {/* ── OVERVIEW ── */}
         {activeTab === "overview" && (
           <View>
-            <Card className="mb-4">
-              <View className="flex-row justify-between items-start mb-3">
-                <Text className="text-lg font-bold text-slate-900">{household.name}</Text>
-                <TouchableOpacity
-                  onPress={handleGenerateInvite}
-                  className="flex-row items-center gap-1.5 bg-primary-50 rounded-lg px-3 py-1.5"
-                >
-                  <Feather name="share-2" size={14} color="#0ea5e9" />
-                  <Text className="text-xs text-primary-600 font-semibold">Invite</Text>
-                </TouchableOpacity>
-              </View>
-              {household.invite_code && (
-                <View className="bg-slate-50 rounded-xl px-3 py-2 mb-3 flex-row items-center justify-between">
-                  <Text className="text-xs text-slate-500">Code:</Text>
-                  <Text className="text-sm font-bold text-slate-700 tracking-widest">
-                    {household.invite_code}
+            {/* Summary gradient card */}
+            <View
+              className="rounded-3xl overflow-hidden mb-4"
+              style={{
+                shadowColor: "#0ea5e9",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 16,
+                elevation: 6,
+              }}
+            >
+              <Svg
+                style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+                width="100%"
+                height="100%"
+                preserveAspectRatio="none"
+              >
+                <Defs>
+                  <LinearGradient id="hhGrad" x1="0" y1="0" x2="1" y2="1">
+                    <Stop offset="0" stopColor="#0ea5e9" stopOpacity="1" />
+                    <Stop offset="1" stopColor="#10b981" stopOpacity="1" />
+                  </LinearGradient>
+                </Defs>
+                <Rect width="100%" height="100%" fill="url(#hhGrad)" />
+              </Svg>
+
+              <View className="p-5">
+                {/* Household name + invite */}
+                <View className="flex-row justify-between items-start mb-4">
+                  <View>
+                    <Text className="text-white text-xl font-bold">{household.name}</Text>
+                    <Text className="text-white/70 text-sm">
+                      {memberList.length} member{memberList.length !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={handleGenerateInvite}
+                    className="flex-row items-center gap-1.5 bg-white/20 rounded-xl px-3 py-2"
+                  >
+                    <Feather name="share-2" size={14} color="#fff" />
+                    <Text className="text-white text-sm font-semibold">Invite</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Net balance */}
+                <View className="bg-white/15 rounded-2xl px-4 py-3 mb-4">
+                  <Text className="text-white/70 text-xs mb-1">Your Balance</Text>
+                  <Text
+                    className="text-white text-2xl font-bold"
+                  >
+                    {netBalance >= 0 ? "+" : ""}
+                    {formatCurrencyDecimal(netBalance)}
+                  </Text>
+                  <Text className="text-white/70 text-xs mt-0.5">
+                    {netBalance >= 0 ? "You are owed" : "You owe"}
                   </Text>
                 </View>
-              )}
-              <View className="flex-row flex-wrap gap-3">
-                {memberList.map((m) => (
-                  <View key={m.id} className="items-center">
-                    <Avatar name={m.full_name} size={48} uri={m.avatar_url} />
-                    <Text className="text-xs text-slate-600 mt-1">{m.full_name.split(" ")[0]}</Text>
-                  </View>
-                ))}
-              </View>
-            </Card>
 
-            {balances && balances.length > 0 && (
+                {/* Member avatars */}
+                <View className="flex-row items-center gap-3 flex-wrap">
+                  {memberList.map((m) => (
+                    <View key={m.id} className="items-center">
+                      <Avatar name={m.full_name} size={44} uri={m.avatar_url} />
+                      <Text className="text-white/80 text-xs mt-1">
+                        {m.full_name.split(" ")[0]}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+
+            {/* Action tiles */}
+            <View className="flex-row gap-3 mb-4">
+              <ActionTile
+                icon={<Feather name="dollar-sign" size={22} color="#22c55e" />}
+                label="Expenses"
+                onPress={() => setActiveTab("expenses")}
+                color="#22c55e"
+                style={{ flex: 1 }}
+              />
+              <ActionTile
+                icon={<Feather name="check-square" size={22} color="#0ea5e9" />}
+                label="Chores"
+                onPress={() => setActiveTab("chores")}
+                color="#0ea5e9"
+                style={{ flex: 1 }}
+              />
+              <ActionTile
+                icon={<Feather name="tool" size={22} color="#f59e0b" />}
+                label="Services"
+                onPress={() => setActiveTab("services")}
+                color="#f59e0b"
+                style={{ flex: 1 }}
+              />
+            </View>
+
+            {/* Balances breakdown */}
+            {balances && balances.length > 1 && (
               <Card className="mb-4">
-                <Text className="font-bold text-slate-900 mb-2">Balances</Text>
+                <Text className="font-bold text-slate-900 mb-3">Household Balances</Text>
                 {balances.map((b) => (
-                  <View key={b.user_id} className="flex-row justify-between py-1.5 border-b border-slate-50 last:border-b-0">
-                    <Text className="text-slate-600">{b.full_name}</Text>
-                    <Text className={`font-medium ${b.net_balance >= 0 ? "text-green-600" : "text-red-500"}`}>
-                      {b.net_balance >= 0 ? "+" : ""}
-                      {formatCurrencyDecimal(b.net_balance)}
+                  <View
+                    key={(b as any).user_id}
+                    className="flex-row justify-between items-center py-2.5 border-b border-slate-50 last:border-b-0"
+                  >
+                    <Text className="text-slate-700 font-medium">{(b as any).full_name}</Text>
+                    <Text
+                      className={`font-bold ${
+                        (b as any).net_balance >= 0 ? "text-green-600" : "text-red-500"
+                      }`}
+                    >
+                      {(b as any).net_balance >= 0 ? "+" : ""}
+                      {formatCurrencyDecimal((b as any).net_balance)}
                     </Text>
                   </View>
                 ))}
               </Card>
             )}
 
-            {/* Quick shortcuts */}
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                onPress={() => setActiveTab("expenses")}
-                className="flex-1 bg-green-50 rounded-xl p-4 items-center"
-              >
-                <Feather name="dollar-sign" size={24} color="#22c55e" />
-                <Text className="text-green-700 font-semibold text-sm mt-1">Expenses</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setActiveTab("chores")}
-                className="flex-1 bg-blue-50 rounded-xl p-4 items-center"
-              >
-                <Feather name="check-square" size={24} color="#3b82f6" />
-                <Text className="text-blue-700 font-semibold text-sm mt-1">Chores</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setActiveTab("services")}
-                className="flex-1 bg-amber-50 rounded-xl p-4 items-center"
-              >
-                <Feather name="tool" size={24} color="#f59e0b" />
-                <Text className="text-amber-700 font-semibold text-sm mt-1">Services</Text>
-              </TouchableOpacity>
-            </View>
+            {household.invite_code && (
+              <Card>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-slate-500 text-sm">Invite Code</Text>
+                  <Text className="text-slate-800 font-bold tracking-widest text-base">
+                    {household.invite_code}
+                  </Text>
+                </View>
+              </Card>
+            )}
           </View>
         )}
 
-        {/* ── EXPENSES ─────────────────────────────────── */}
         {activeTab === "expenses" && (
-          <ExpensesTab members={memberList.map((m) => ({ id: m.id, full_name: m.full_name }))} />
+          <ExpensesTab
+            members={memberList.map((m) => ({ id: m.id, full_name: m.full_name }))}
+          />
         )}
 
-        {/* ── CHORES ───────────────────────────────────── */}
         {activeTab === "chores" && (
           <ChoresTab
             members={memberList.map((m) => ({ id: m.id, full_name: m.full_name }))}
@@ -305,22 +399,22 @@ export default function HouseholdScreen() {
           />
         )}
 
-        {/* ── SERVICES ─────────────────────────────────── */}
         {activeTab === "services" && (
-          <View className="items-center py-12">
-            <Feather name="tool" size={48} color="#cbd5e1" />
-            <Text className="text-slate-400 mt-4 text-base">Service Directory</Text>
+          <View className="items-center py-16">
+            <View className="w-16 h-16 bg-amber-50 rounded-2xl items-center justify-center mb-4">
+              <Feather name="tool" size={28} color="#f59e0b" />
+            </View>
+            <Text className="text-slate-700 font-bold text-lg">Service Directory</Text>
             <Text className="text-slate-400 text-sm text-center mt-1">
               Find plumbers, electricians, cleaners and more.
             </Text>
-            <View className="mt-4">
-              <Button
-                title="Browse Services"
-                onPress={() => router.push("/services" as any)}
-                variant="outline"
-                size="sm"
-              />
-            </View>
+            <TouchableOpacity
+              onPress={() => router.push("/services" as any)}
+              className="mt-5 border-2 border-amber-400 rounded-2xl px-6 py-3"
+              activeOpacity={0.85}
+            >
+              <Text className="text-amber-600 font-semibold">Browse Services</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
