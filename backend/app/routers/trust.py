@@ -9,7 +9,7 @@ from app.middleware.auth import get_current_user
 from app.models.match import Vouch
 from app.models.trust_score import TrustEvent, TrustSnapshot
 from app.models.user import User
-from app.schemas.trust import TrustEventResponse, TrustScoreResponse, VouchCreate, VouchResponse
+from app.schemas.trust import TrustActivityItem, TrustEventResponse, TrustScoreResponse, VouchCreate, VouchResponse
 from app.services.trust_engine import TrustEngine
 
 router = APIRouter()
@@ -23,6 +23,55 @@ EVENT_TITLES = {
     "vouch_received": "Community vouch received",
     "vouch_given": "You vouched for another user",
 }
+
+
+async def _build_score_extras(
+    user_id: uuid.UUID,
+    snapshot,
+    db: AsyncSession,
+) -> dict:
+    breakdown = {
+        "verification": float(snapshot.verification_score),
+        "financial": float(snapshot.financial_score),
+        "household": float(snapshot.household_score),
+        "tenure": float(snapshot.tenure_score),
+        "community": float(snapshot.community_score),
+    }
+
+    events_result = await db.execute(
+        select(TrustEvent)
+        .where(TrustEvent.user_id == user_id)
+        .order_by(TrustEvent.created_at.desc())
+        .limit(10)
+    )
+    recent_events = list(events_result.scalars().all())
+    recent_activity = [
+        TrustActivityItem(
+            type=EVENT_TITLES.get(e.event_type, e.event_type.replace("_", " ").title()),
+            points=float(e.points_delta),
+        )
+        for e in recent_events
+    ]
+
+    suggestions = []
+    if float(snapshot.verification_score) < 10:
+        suggestions.append("Verify your phone number to boost your verification score")
+    if float(snapshot.verification_score) < 15:
+        suggestions.append("Upload a government ID for a significant trust boost")
+    if float(snapshot.financial_score) < 15:
+        suggestions.append("Link and verify a payment method to improve financial trust")
+    if float(snapshot.household_score) < 10:
+        suggestions.append("Join a household and contribute to chores and expenses")
+    if float(snapshot.community_score) < 5:
+        suggestions.append("Participate in community posts and vouch for trusted neighbors")
+    if float(snapshot.tenure_score) < 5:
+        suggestions.append("Accounts with longer tenure earn higher tenure scores over time")
+
+    return {
+        "breakdown": breakdown,
+        "recent_activity": recent_activity,
+        "improvement_suggestions": suggestions[:4],
+    }
 
 
 def _trend_explanation(trend: str | None) -> str | None:
@@ -58,6 +107,7 @@ async def get_my_trust_score(
 ):
     engine = TrustEngine(db)
     snapshot = await engine.calculate(current_user.id)
+    extras = await _build_score_extras(current_user.id, snapshot, db)
     return TrustScoreResponse(
         total_score=float(snapshot.total_score),
         verification_score=float(snapshot.verification_score),
@@ -68,6 +118,7 @@ async def get_my_trust_score(
         trend=snapshot.trend,
         trend_explanation=_trend_explanation(snapshot.trend),
         calculated_at=snapshot.calculated_at,
+        **extras,
     )
 
 
@@ -83,6 +134,7 @@ async def get_user_trust_score(
 
     engine = TrustEngine(db)
     snapshot = await engine.calculate(user_id)
+    extras = await _build_score_extras(user_id, snapshot, db)
     return TrustScoreResponse(
         total_score=float(snapshot.total_score),
         verification_score=float(snapshot.verification_score),
@@ -93,6 +145,7 @@ async def get_user_trust_score(
         trend=snapshot.trend,
         trend_explanation=_trend_explanation(snapshot.trend),
         calculated_at=snapshot.calculated_at,
+        **extras,
     )
 
 

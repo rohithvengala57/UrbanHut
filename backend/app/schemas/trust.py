@@ -4,6 +4,11 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class TrustActivityItem(BaseModel):
+    type: str
+    points: float
+
+
 class TrustScoreResponse(BaseModel):
     total_score: float
     verification_score: float
@@ -14,6 +19,9 @@ class TrustScoreResponse(BaseModel):
     trend: str | None = None
     trend_explanation: str | None = None
     calculated_at: datetime
+    breakdown: dict | None = None
+    recent_activity: list[TrustActivityItem] | None = None
+    improvement_suggestions: list[str] | None = None
 
     model_config = {"from_attributes": True}
 

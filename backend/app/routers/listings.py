@@ -23,6 +23,7 @@ from app.schemas.listing import (
     ListingStatusUpdate,
     ListingUpdate,
     MyListingResponse,
+    RoommateCard,
 )
 from app.schemas.match import InterestDetailResponse, InterestStatus
 from app.services.matching_engine import MatchingEngine
@@ -31,6 +32,25 @@ from app.utils.s3 import listing_image_prefix, process_and_upload_image
 
 router = APIRouter()
 _bearer = HTTPBearer(auto_error=False)
+
+
+def _roommate_traits(member: User) -> list[str]:
+    traits = []
+    if member.sleep_schedule:
+        traits.append(f"{member.sleep_schedule.replace('_', ' ').title()} sleeper")
+    cleanliness = getattr(member, "cleanliness_level", None)
+    if cleanliness is not None:
+        if cleanliness >= 4:
+            traits.append("Very clean")
+        elif cleanliness >= 3:
+            traits.append("Moderately clean")
+    if getattr(member, "smoking", None) is False:
+        traits.append("Non-smoker")
+    if getattr(member, "pet_friendly", None) is True:
+        traits.append("Pet friendly")
+    if getattr(member, "noise_tolerance", None):
+        traits.append(f"{member.noise_tolerance.replace('_', ' ').title()} noise tolerance")
+    return traits[:4]
 
 
 async def _get_optional_user(
@@ -342,7 +362,27 @@ async def get_listing(listing_id: uuid.UUID, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
     listing.view_count += 1
-    return listing
+
+    response = ListingResponse.model_validate(listing)
+
+    hh_result = await db.execute(select(Household).where(Household.listing_id == listing_id))
+    household = hh_result.scalar_one_or_none()
+    if household:
+        members_result = await db.execute(select(User).where(User.household_id == household.id))
+        members = list(members_result.scalars().all())
+        if members:
+            avg_trust = round(sum(float(m.trust_score) for m in members) / len(members), 1)
+            roommates = [
+                RoommateCard(
+                    name=m.full_name.split()[0] if m.full_name else "Roommate",
+                    trust_score=round(float(m.trust_score), 1),
+                    traits=_roommate_traits(m),
+                )
+                for m in members
+            ]
+            response = response.model_copy(update={"avg_roommate_trust": avg_trust, "roommates": roommates})
+
+    return response
 
 
 # ─── UH-102: Listing Interest Inbox ──────────────────────────────────────────

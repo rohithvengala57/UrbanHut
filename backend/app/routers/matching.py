@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
+from app.models.household import Household
 from app.models.listing import Listing
 from app.models.match import MatchInterest
 from app.models.user import User
@@ -19,6 +20,27 @@ from app.schemas.match import (
 from app.services.matching_engine import MatchingEngine
 
 router = APIRouter()
+
+
+def _derive_match_reasons(breakdown: dict) -> list[str]:
+    reasons = []
+    dims = breakdown.get("dimensions", {})
+    if dims.get("sleep_schedule", 0) >= 8:
+        reasons.append("Similar sleep schedule")
+    if dims.get("cleanliness_level", 0) >= 10:
+        reasons.append("Matching cleanliness standards")
+    if dims.get("noise_tolerance", 0) >= 7:
+        reasons.append("Compatible noise preferences")
+    if dims.get("pet_friendly", 0) >= 4:
+        reasons.append("Both pet friendly")
+    if dims.get("smoking", 0) >= 8:
+        reasons.append("Matching smoking preference")
+    if breakdown.get("budget_score", 0) >= 7:
+        reasons.append("Budget compatible")
+    if breakdown.get("trust_score", 0) >= 7:
+        reasons.append("Similar trust levels")
+    return reasons[:4] if reasons else ["Lifestyle compatible"]
+
 
 # ─── UH-302: Valid status transitions ────────────────────────────────────────
 VALID_TRANSITIONS: dict[str, set[str]] = {
@@ -67,6 +89,30 @@ async def get_recommendations(
             continue
 
         compat = engine.calculate_compatibility(current_user, host)
+        match_pct = int(round(compat["total_score"]))
+        match_reasons = _derive_match_reasons(compat.get("breakdown", {}))
+
+        # Avg roommate trust from linked household
+        avg_roommate_trust: float | None = None
+        hh_result = await db.execute(select(Household).where(Household.listing_id == listing.id))
+        household = hh_result.scalar_one_or_none()
+        if household:
+            members_result = await db.execute(select(User).where(User.household_id == household.id))
+            members = list(members_result.scalars().all())
+            if members:
+                avg_roommate_trust = round(sum(float(m.trust_score) for m in members) / len(members), 1)
+
+        # Highlights: short human-readable callouts
+        highlights = []
+        if listing.utilities_included:
+            highlights.append("Utilities included")
+        if listing.is_verified:
+            highlights.append("Verified listing")
+        if listing.transit_walk_mins is not None and listing.transit_walk_mins <= 10:
+            highlights.append(f"{listing.transit_walk_mins} min to transit")
+        if avg_roommate_trust is not None and avg_roommate_trust >= 70:
+            highlights.append("Highly trusted household")
+
         recommendations.append({
             "listing_id": str(listing.id),
             "title": listing.title,
@@ -75,6 +121,10 @@ async def get_recommendations(
             "room_type": listing.room_type,
             "images": listing.images,
             "compatibility": compat,
+            "match_percentage": match_pct,
+            "match_reasons": match_reasons,
+            "avg_roommate_trust": avg_roommate_trust,
+            "highlights": highlights,
         })
 
     recommendations.sort(key=lambda r: r["compatibility"]["total_score"], reverse=True)
