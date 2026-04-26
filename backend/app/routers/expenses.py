@@ -180,6 +180,65 @@ async def get_balances(
     ]
 
 
+@router.get("/summary")
+async def get_expense_summary(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Household expense summary: total balance and per-member breakdown."""
+    if not current_user.household_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not in a household")
+
+    members_result = await db.execute(
+        select(User).where(User.household_id == current_user.household_id)
+    )
+    members = {m.id: m for m in members_result.scalars().all()}
+
+    expenses_result = await db.execute(
+        select(Expense).where(Expense.household_id == current_user.household_id)
+    )
+    expenses = list(expenses_result.scalars().all())
+
+    if not expenses:
+        return {
+            "total_balance": 0,
+            "breakdown_per_member": [
+                {"user_id": str(uid), "full_name": m.full_name, "net_balance": 0, "pending_amount": 0}
+                for uid, m in members.items()
+            ],
+        }
+
+    splits_result = await db.execute(
+        select(ExpenseSplit).where(ExpenseSplit.expense_id.in_([e.id for e in expenses]))
+    )
+    splits = list(splits_result.scalars().all())
+
+    net: dict[uuid.UUID, int] = defaultdict(int)
+    pending: dict[uuid.UUID, int] = defaultdict(int)
+
+    for expense in expenses:
+        net[expense.paid_by] += expense.amount
+
+    for split in splits:
+        net[split.user_id] -= split.amount_owed
+        if split.status == "pending":
+            pending[split.user_id] += split.amount_owed
+
+    total_balance = sum(abs(v) for v in net.values()) // 2
+
+    breakdown = [
+        {
+            "user_id": str(uid),
+            "full_name": members[uid].full_name if uid in members else "Unknown",
+            "net_balance": net.get(uid, 0),
+            "pending_amount": pending.get(uid, 0),
+        }
+        for uid in members
+    ]
+
+    return {"total_balance": total_balance, "breakdown_per_member": breakdown}
+
+
 @router.post("/{expense_id}/settle")
 async def settle_split(
     expense_id: uuid.UUID,

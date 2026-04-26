@@ -80,6 +80,12 @@ class ListingStatusUpdate(BaseModel):
     status: ListingStatus
 
 
+class RoommateCard(BaseModel):
+    name: str
+    trust_score: float
+    traits: list[str]
+
+
 class ListingResponse(BaseModel):
     id: uuid.UUID
     host_id: uuid.UUID
@@ -116,6 +122,8 @@ class ListingResponse(BaseModel):
     view_count: int
     created_at: datetime
     updated_at: datetime
+    avg_roommate_trust: float | None = None
+    roommates: list[RoommateCard] | None = None
 
     model_config = {"from_attributes": True}
 

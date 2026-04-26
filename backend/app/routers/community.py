@@ -31,6 +31,7 @@ class PostResponse(BaseModel):
     author_id: uuid.UUID
     city: str
     type: str
+    post_type: str | None = None
     title: str
     body: str
     upvotes: int
@@ -38,6 +39,7 @@ class PostResponse(BaseModel):
     created_at: str
     author_name: str | None = None
     author_trust_score: float | None = None
+    user_trust_score: float | None = None
     user_upvoted: bool = False
 
     class Config:
@@ -61,23 +63,34 @@ class ReplyResponse(BaseModel):
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+_POST_TYPE_MAP = {
+    "tip": "TIP",
+    "event": "EVENT",
+    "recommendation": "RECOMMENDATION",
+    "question": "QUESTION",
+}
+
+
 async def _post_to_response(
     post: CommunityPost,
     author: User | None,
     user_upvoted: bool = False,
 ) -> PostResponse:
+    trust_score = float(author.trust_score) if author else None
     return PostResponse(
         id=post.id,
         author_id=post.author_id,
         city=post.city,
         type=post.type,
+        post_type=_POST_TYPE_MAP.get(post.type.lower(), post.type.upper()),
         title=post.title,
         body=post.body,
         upvotes=post.upvotes,
         reply_count=post.reply_count,
         created_at=post.created_at.isoformat(),
         author_name=author.full_name if author else None,
-        author_trust_score=float(author.trust_score) if author else None,
+        author_trust_score=trust_score,
+        user_trust_score=trust_score,
         user_upvoted=user_upvoted,
     )
 

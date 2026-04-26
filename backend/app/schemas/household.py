@@ -10,6 +10,12 @@ class HouseholdCreate(BaseModel):
     max_members: int = Field(default=6, ge=2, le=20)
 
 
+class MemberTrustScore(BaseModel):
+    user_id: uuid.UUID
+    full_name: str
+    trust_score: float
+
+
 class HouseholdResponse(BaseModel):
     id: uuid.UUID
     name: str
@@ -19,6 +25,8 @@ class HouseholdResponse(BaseModel):
     max_members: int
     status: str
     created_at: datetime
+    household_trust_level: float | None = None
+    member_trust_scores: list[MemberTrustScore] | None = None
 
     model_config = {"from_attributes": True}
 

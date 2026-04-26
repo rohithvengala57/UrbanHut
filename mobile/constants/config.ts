@@ -4,7 +4,8 @@ export const API_BASE = `${API_URL}/api/v1`;
 export const COLORS = {
   primary: "#0ea5e9",
   primaryDark: "#0284c7",
-  accent: "#d946ef",
+  accent: "#10b981",
+  accentDark: "#059669",
   background: "#f8fafc",
   surface: "#ffffff",
   text: "#0f172a",
@@ -13,6 +14,8 @@ export const COLORS = {
   error: "#ef4444",
   success: "#22c55e",
   warning: "#f59e0b",
+  gradientStart: "#0ea5e9",
+  gradientEnd: "#10b981",
   trust: {
     low: "#ef4444",
     medium: "#f59e0b",

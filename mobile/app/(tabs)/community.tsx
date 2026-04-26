@@ -51,7 +51,12 @@ const typeColors: Record<string, string> = {
   recommendation: "#22c55e",
 };
 
-// ─── Reply types ─────────────────────────────────────────────────────────────
+const typeBg: Record<string, string> = {
+  tip: "#fef3c7",
+  question: "#ede9fe",
+  event: "#e0f2fe",
+  recommendation: "#dcfce7",
+};
 
 interface Reply {
   id: string;
@@ -80,8 +85,6 @@ interface Post {
   user_upvoted?: boolean;
 }
 
-// ─── Reply Panel ─────────────────────────────────────────────────────────────
-
 function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
   const [replyText, setReplyText] = useState("");
   const queryClient = useQueryClient();
@@ -108,18 +111,11 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
       Alert.alert("Error", err.response?.data?.detail || "Failed to post reply"),
   });
 
-  const handleSubmit = () => {
-    const trimmed = replyText.trim();
-    if (!trimmed) return;
-    createReply.mutate(trimmed);
-  };
-
   return (
     <Modal visible transparent animationType="slide">
       <View className="flex-1 justify-end bg-black/40">
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View className="bg-white rounded-t-3xl max-h-[80%]">
-            {/* Header */}
             <View className="flex-row items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
               <View className="flex-1 pr-3">
                 <Text className="font-bold text-slate-900" numberOfLines={1}>
@@ -134,7 +130,6 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
               </TouchableOpacity>
             </View>
 
-            {/* Replies list */}
             {isLoading ? (
               <View className="items-center justify-center py-10">
                 <ActivityIndicator size="small" color="#0ea5e9" />
@@ -159,9 +154,11 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
                           {item.author_name || "User"}
                         </Text>
                         {(item.author_trust_score ?? 0) > 0 && (
-                          <Text className="text-xs text-primary-500">
-                            {Math.round(item.author_trust_score!)} trust
-                          </Text>
+                          <View className="bg-primary-50 rounded-full px-2 py-0.5">
+                            <Text className="text-xs text-primary-500 font-medium">
+                              {Math.round(item.author_trust_score!)} trust
+                            </Text>
+                          </View>
                         )}
                         <Text className="text-xs text-slate-400">
                           {formatRelativeDate(item.created_at)}
@@ -174,7 +171,6 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
               />
             )}
 
-            {/* Reply input */}
             <View className="flex-row items-end gap-3 px-4 py-3 border-t border-slate-100">
               <TextInput
                 className="flex-1 bg-slate-100 rounded-2xl px-4 py-2.5 text-slate-900 text-sm max-h-24"
@@ -186,7 +182,11 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
                 autoCapitalize="sentences"
               />
               <TouchableOpacity
-                onPress={handleSubmit}
+                onPress={() => {
+                  const trimmed = replyText.trim();
+                  if (!trimmed) return;
+                  createReply.mutate(trimmed);
+                }}
                 disabled={!replyText.trim() || createReply.isPending}
                 className={`w-10 h-10 rounded-full items-center justify-center ${
                   replyText.trim() ? "bg-primary-500" : "bg-slate-200"
@@ -195,7 +195,11 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
                 {createReply.isPending ? (
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
-                  <Feather name="send" size={18} color={replyText.trim() ? "#fff" : "#94a3b8"} />
+                  <Feather
+                    name="send"
+                    size={18}
+                    color={replyText.trim() ? "#fff" : "#94a3b8"}
+                  />
                 )}
               </TouchableOpacity>
             </View>
@@ -205,8 +209,6 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
     </Modal>
   );
 }
-
-// ─── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function CommunityScreen() {
   const [selectedType, setSelectedType] = useState("all");
@@ -254,17 +256,9 @@ export default function CommunityScreen() {
     },
   });
 
-  const handleCreate = () => {
-    if (!createForm.title.trim() || !createForm.body.trim()) {
-      Alert.alert("Error", "Please fill in title and body");
-      return;
-    }
-    createPost.mutate(createForm);
-  };
-
   return (
     <View className="flex-1 bg-slate-50">
-      {/* Type Filter */}
+      {/* Type filter */}
       <View className="bg-white border-b border-slate-100 px-4 py-2">
         <FlatList
           horizontal
@@ -277,9 +271,10 @@ export default function CommunityScreen() {
               className={`rounded-full px-4 py-2 mr-2 ${
                 selectedType === item.key ? "bg-primary-500" : "bg-slate-100"
               }`}
+              activeOpacity={0.85}
             >
               <Text
-                className={`text-sm font-medium ${
+                className={`text-sm font-semibold ${
                   selectedType === item.key ? "text-white" : "text-slate-600"
                 }`}
               >
@@ -298,106 +293,122 @@ export default function CommunityScreen() {
         <FlatList
           data={posts || []}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 88 }}
           onRefresh={refetch}
           refreshing={isRefetching}
-          renderItem={({ item }) => (
-            <Card className="mb-3">
-              <View className="flex-row items-start gap-3">
-                <Avatar name={item.author_name || "User"} size={40} />
-                <View className="flex-1">
-                  {/* Author + timestamp */}
-                  <View className="flex-row items-center gap-2 mb-1">
-                    <Text className="font-medium text-slate-900">{item.author_name}</Text>
-                    {(item.author_trust_score ?? 0) > 0 && (
-                      <Text className="text-xs text-primary-500 font-medium">
-                        {Math.round(item.author_trust_score!)} trust
+          renderItem={({ item }) => {
+            const color = typeColors[item.type] || "#64748b";
+            const bg = typeBg[item.type] || "#f8fafc";
+            const icon = typeIcons[item.type] || "message-circle";
+            return (
+              <Card className="mb-3">
+                <View className="flex-row items-start gap-3">
+                  <Avatar name={item.author_name || "User"} size={40} />
+                  <View className="flex-1">
+                    {/* Author row with trust badge */}
+                    <View className="flex-row items-center gap-2 mb-1 flex-wrap">
+                      <Text className="font-semibold text-slate-900">{item.author_name}</Text>
+                      {(item.author_trust_score ?? 0) > 0 && (
+                        <View className="bg-primary-50 rounded-full px-2 py-0.5">
+                          <Text className="text-xs text-primary-500 font-bold">
+                            {Math.round(item.author_trust_score!)} trust
+                          </Text>
+                        </View>
+                      )}
+                      <Text className="text-xs text-slate-400">
+                        {formatRelativeDate(item.created_at)}
                       </Text>
-                    )}
-                    <Text className="text-xs text-slate-400">
-                      {formatRelativeDate(item.created_at)}
-                    </Text>
-                  </View>
+                    </View>
 
-                  {/* Type badge */}
-                  <View className="flex-row items-center gap-1.5 mb-1">
-                    <Feather
-                      name={typeIcons[item.type] || "message-circle"}
-                      size={12}
-                      color={typeColors[item.type] || "#64748b"}
-                    />
-                    <Text
-                      className="text-xs font-medium uppercase"
-                      style={{ color: typeColors[item.type] || "#64748b" }}
+                    {/* Type tag */}
+                    <View
+                      className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1 self-start mb-2"
+                      style={{ backgroundColor: bg }}
                     >
-                      {item.type}
+                      <Feather name={icon} size={11} color={color} />
+                      <Text className="text-xs font-bold uppercase" style={{ color }}>
+                        {item.type}
+                      </Text>
+                    </View>
+
+                    <Text className="font-bold text-slate-900 text-base mb-1">{item.title}</Text>
+                    <Text className="text-slate-600 text-sm" numberOfLines={4}>
+                      {item.body}
                     </Text>
-                  </View>
 
-                  <Text className="font-bold text-slate-900 mb-1">{item.title}</Text>
-                  <Text className="text-slate-600 text-sm" numberOfLines={4}>
-                    {item.body}
-                  </Text>
-
-                  {/* Actions row */}
-                  <View className="flex-row items-center gap-4 mt-3">
-                    {/* Upvote */}
-                    <TouchableOpacity
-                      className="flex-row items-center gap-1"
-                      onPress={() => upvotePost.mutate(item.id)}
-                    >
-                      <Feather
-                        name="arrow-up"
-                        size={16}
-                        color={item.user_upvoted ? "#0ea5e9" : "#64748b"}
-                      />
-                      <Text
-                        className={`text-sm font-medium ${
-                          item.user_upvoted ? "text-primary-500" : "text-slate-500"
-                        }`}
+                    {/* Actions */}
+                    <View className="flex-row items-center gap-5 mt-3 pt-3 border-t border-slate-50">
+                      <TouchableOpacity
+                        className="flex-row items-center gap-1.5"
+                        onPress={() => upvotePost.mutate(item.id)}
+                        activeOpacity={0.7}
                       >
-                        {item.upvotes}
-                      </Text>
-                    </TouchableOpacity>
+                        <View
+                          className={`w-7 h-7 rounded-full items-center justify-center ${
+                            item.user_upvoted ? "bg-primary-100" : "bg-slate-100"
+                          }`}
+                        >
+                          <Feather
+                            name="arrow-up"
+                            size={14}
+                            color={item.user_upvoted ? "#0ea5e9" : "#64748b"}
+                          />
+                        </View>
+                        <Text
+                          className={`text-sm font-semibold ${
+                            item.user_upvoted ? "text-primary-500" : "text-slate-500"
+                          }`}
+                        >
+                          {item.upvotes}
+                        </Text>
+                      </TouchableOpacity>
 
-                    {/* Reply */}
-                    <TouchableOpacity
-                      className="flex-row items-center gap-1"
-                      onPress={() => setReplyPost(item)}
-                    >
-                      <Feather name="message-square" size={16} color="#64748b" />
-                      <Text className="text-sm text-slate-500">
-                        {item.reply_count > 0
-                          ? `${item.reply_count} ${item.reply_count === 1 ? "reply" : "replies"}`
-                          : "Reply"}
-                      </Text>
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        className="flex-row items-center gap-1.5"
+                        onPress={() => setReplyPost(item)}
+                        activeOpacity={0.7}
+                      >
+                        <Feather name="message-square" size={16} color="#64748b" />
+                        <Text className="text-sm text-slate-500">
+                          {item.reply_count > 0
+                            ? `${item.reply_count} ${item.reply_count === 1 ? "reply" : "replies"}`
+                            : "Reply"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </Card>
-          )}
+              </Card>
+            );
+          }}
           ListEmptyComponent={
             <View className="items-center justify-center py-20">
               <Feather name="message-circle" size={48} color="#cbd5e1" />
               <Text className="text-slate-400 mt-4 text-base">No posts yet</Text>
-              <Text className="text-slate-400 text-sm">Be the first to post in your community</Text>
+              <Text className="text-slate-400 text-sm">
+                Be the first to post in your community
+              </Text>
             </View>
           }
         />
       )}
 
-      {/* FAB - Create Post */}
+      {/* FAB */}
       <TouchableOpacity
         onPress={() => setShowCreateModal(true)}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-lg"
-        style={{ elevation: 8 }}
-        activeOpacity={0.8}
+        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
+        style={{
+          elevation: 8,
+          shadowColor: "#0ea5e9",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.4,
+          shadowRadius: 12,
+        }}
+        activeOpacity={0.85}
       >
         <Feather name="edit-3" size={24} color="#fff" />
       </TouchableOpacity>
 
-      {/* Reply Panel */}
       {replyPost && (
         <ReplyPanel post={replyPost} onClose={() => setReplyPost(null)} />
       )}
@@ -414,33 +425,32 @@ export default function CommunityScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Post Type */}
               <Text className="text-sm font-medium text-slate-700 mb-2">Type</Text>
-              <View className="flex-row gap-2 mb-4">
-                {CREATE_TYPES.map((t) => (
-                  <TouchableOpacity
-                    key={t.key}
-                    onPress={() => setCreateForm((p) => ({ ...p, type: t.key }))}
-                    className={`flex-1 py-2.5 rounded-xl items-center border ${
-                      createForm.type === t.key
-                        ? "bg-primary-50 border-primary-500"
-                        : "border-slate-200"
-                    }`}
-                  >
-                    <Feather
-                      name={t.icon}
-                      size={16}
-                      color={createForm.type === t.key ? "#0ea5e9" : "#94a3b8"}
-                    />
-                    <Text
-                      className={`text-xs font-medium mt-1 ${
-                        createForm.type === t.key ? "text-primary-600" : "text-slate-500"
-                      }`}
+              <View className="flex-row gap-2 mb-5">
+                {CREATE_TYPES.map((t) => {
+                  const isActive = createForm.type === t.key;
+                  const color = typeColors[t.key] || "#64748b";
+                  const bg = typeBg[t.key] || "#f8fafc";
+                  return (
+                    <TouchableOpacity
+                      key={t.key}
+                      onPress={() => setCreateForm((p) => ({ ...p, type: t.key }))}
+                      className="flex-1 py-3 rounded-2xl items-center border"
+                      style={{
+                        backgroundColor: isActive ? bg : "#fff",
+                        borderColor: isActive ? color : "#e2e8f0",
+                      }}
                     >
-                      {t.label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                      <Feather name={t.icon} size={18} color={isActive ? color : "#94a3b8"} />
+                      <Text
+                        className="text-xs font-semibold mt-1"
+                        style={{ color: isActive ? color : "#94a3b8" }}
+                      >
+                        {t.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text className="text-sm font-medium text-slate-700 mb-1">Title *</Text>
@@ -454,7 +464,7 @@ export default function CommunityScreen() {
 
               <Text className="text-sm font-medium text-slate-700 mb-1">Body *</Text>
               <TextInput
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 mb-4 min-h-[120px]"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 mb-5 min-h-[120px]"
                 placeholder="Share details..."
                 value={createForm.body}
                 onChangeText={(v) => setCreateForm((p) => ({ ...p, body: v }))}
@@ -465,7 +475,13 @@ export default function CommunityScreen() {
 
               <Button
                 title="Post"
-                onPress={handleCreate}
+                onPress={() => {
+                  if (!createForm.title.trim() || !createForm.body.trim()) {
+                    Alert.alert("Error", "Please fill in title and body");
+                    return;
+                  }
+                  createPost.mutate(createForm);
+                }}
                 loading={createPost.isPending}
                 size="lg"
               />

@@ -9,7 +9,7 @@ from app.database import get_db
 from app.middleware.auth import get_current_user
 from app.models.household import Household
 from app.models.user import User
-from app.schemas.household import HouseholdCreate, HouseholdJoin, HouseholdResponse
+from app.schemas.household import HouseholdCreate, HouseholdJoin, HouseholdResponse, MemberTrustScore
 
 router = APIRouter()
 
@@ -51,7 +51,23 @@ async def get_my_household(
     household = result.scalar_one_or_none()
     if not household:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Household not found")
-    return household
+
+    response = HouseholdResponse.model_validate(household)
+
+    members_result = await db.execute(select(User).where(User.household_id == household.id))
+    members = list(members_result.scalars().all())
+    if members:
+        trust_level = round(sum(float(m.trust_score) for m in members) / len(members), 1)
+        member_scores = [
+            MemberTrustScore(user_id=m.id, full_name=m.full_name, trust_score=round(float(m.trust_score), 1))
+            for m in members
+        ]
+        response = response.model_copy(update={
+            "household_trust_level": trust_level,
+            "member_trust_scores": member_scores,
+        })
+
+    return response
 
 
 @router.post("/join", response_model=HouseholdResponse)

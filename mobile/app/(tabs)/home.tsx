@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import ListingsMap from "@/components/map/ListingsMap";
@@ -41,6 +42,34 @@ const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
+] as const;
+
+/* ---------- Insight card data ---------- */
+const INSIGHT_CARDS = [
+  {
+    key: "match",
+    title: "Best Match Today",
+    subtitle: "92% compatibility",
+    icon: "heart" as const,
+    gradientStart: "#0ea5e9",
+    gradientEnd: "#10b981",
+  },
+  {
+    key: "nearby",
+    title: "Homes Near You",
+    subtitle: "14 new this week",
+    icon: "map-pin" as const,
+    gradientStart: "#8b5cf6",
+    gradientEnd: "#0ea5e9",
+  },
+  {
+    key: "people",
+    title: "People Looking",
+    subtitle: "37 active seekers",
+    icon: "users" as const,
+    gradientStart: "#f59e0b",
+    gradientEnd: "#ef4444",
+  },
 ] as const;
 
 /* ---------- chip label helpers ---------- */
@@ -75,19 +104,63 @@ function chipLabel(key: keyof ListingFilters, value: unknown): string {
   return `${prefix}: ${value}`;
 }
 
+/* ── Insight card component ── */
+function InsightCard({
+  title,
+  subtitle,
+  icon,
+  gradientStart,
+  gradientEnd,
+}: {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof import("@expo/vector-icons").Feather.glyphMap;
+  gradientStart: string;
+  gradientEnd: string;
+}) {
+  return (
+    <View
+      className="rounded-2xl overflow-hidden mr-3"
+      style={{ width: 150, height: 90 }}
+    >
+      <Svg
+        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
+        width="100%"
+        height="100%"
+        preserveAspectRatio="none"
+      >
+        <Defs>
+          <LinearGradient id={`ig-${icon}`} x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={gradientStart} stopOpacity="1" />
+            <Stop offset="1" stopColor={gradientEnd} stopOpacity="1" />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill={`url(#ig-${icon})`} />
+      </Svg>
+      <View className="flex-1 p-3 justify-between">
+        <View className="w-8 h-8 bg-white/20 rounded-xl items-center justify-center">
+          <Feather name={icon} size={16} color="#fff" />
+        </View>
+        <View>
+          <Text className="text-white font-bold text-sm" numberOfLines={1}>
+            {title}
+          </Text>
+          <Text className="text-white/75 text-xs">{subtitle}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 /* ================================================================== */
 /*  HomeScreen                                                        */
 /* ================================================================== */
 export default function HomeScreen() {
-  /* ---- filter modal visibility ---- */
   const [filterVisible, setFilterVisible] = useState(false);
-
-  /* ---- local draft state for price inputs (to avoid writing every keystroke) ---- */
   const [draftPriceMin, setDraftPriceMin] = useState("");
   const [draftPriceMax, setDraftPriceMax] = useState("");
   const [draftAvailableFrom, setDraftAvailableFrom] = useState("");
 
-  /* ---- store selectors ---- */
   const viewMode = useUIStore((s) => s.listingViewMode);
   const setViewMode = useUIStore((s) => s.setListingViewMode);
   const listingFilters = useUIStore((s) => s.listingFilters);
@@ -96,7 +169,6 @@ export default function HomeScreen() {
   const clearFilter = useUIStore((s) => s.clearFilter);
   const user = useAuthStore((s) => s.user);
 
-  /* ---- derive search city from store ---- */
   const searchCity = listingFilters.city ?? "";
 
   const handleCityChange = useCallback(
@@ -106,7 +178,6 @@ export default function HomeScreen() {
     [updateFilter],
   );
 
-  /* ---- listings query uses store filters ---- */
   const {
     data: listings,
     isLoading,
@@ -114,7 +185,6 @@ export default function HomeScreen() {
     isRefetching,
   } = useListings(listingFilters);
 
-  /* ---- active filter chips (exclude city since it's in the search bar) ---- */
   const activeChips = useMemo(() => {
     const chips: { key: keyof ListingFilters; label: string }[] = [];
     const keys = Object.keys(listingFilters) as (keyof ListingFilters)[];
@@ -126,7 +196,6 @@ export default function HomeScreen() {
     return chips;
   }, [listingFilters]);
 
-  /* ---- open filter modal: seed drafts ---- */
   const openFilters = useCallback(() => {
     setDraftPriceMin(
       listingFilters.price_min != null ? String(listingFilters.price_min) : "",
@@ -138,7 +207,6 @@ export default function HomeScreen() {
     setFilterVisible(true);
   }, [listingFilters]);
 
-  /* ---- apply draft prices on close ---- */
   const applyAndClose = useCallback(() => {
     const min = draftPriceMin ? Number(draftPriceMin) : undefined;
     const max = draftPriceMax ? Number(draftPriceMax) : undefined;
@@ -148,7 +216,6 @@ export default function HomeScreen() {
     setFilterVisible(false);
   }, [draftPriceMin, draftPriceMax, draftAvailableFrom, updateFilter]);
 
-  /* ---- map markers ---- */
   const markersData = useMemo(
     () =>
       (listings ?? []).filter(
@@ -157,31 +224,35 @@ export default function HomeScreen() {
     [listings],
   );
 
+  const firstName = user?.full_name?.split(" ")[0] ?? "there";
+
   /* ================================================================ */
   return (
     <View className="flex-1 bg-slate-50">
-      {/* ============ Search Bar ============ */}
-      <View className="bg-white px-4 pt-2 pb-3 border-b border-slate-100">
-        {/* Greeting + My Listings */}
+      {/* ============ Header ============ */}
+      <View className="bg-white px-4 pt-3 pb-3 border-b border-slate-100">
+        {/* Greeting row */}
         {user && (
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-lg font-bold text-slate-900">
-              Hi, {user.full_name.split(" ")[0]} 👋
-            </Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <View>
+              <Text className="text-2xl font-bold text-slate-900">
+                Hi, {firstName} 👋
+              </Text>
+              <Text className="text-slate-400 text-sm">Find your perfect home</Text>
+            </View>
             <TouchableOpacity
               onPress={() => router.push("/listing/my-listings" as any)}
-              className="flex-row items-center gap-1.5 bg-primary-50 rounded-full px-3 py-1.5"
+              className="flex-row items-center gap-1.5 bg-primary-50 rounded-2xl px-3 py-2"
             >
-              <Feather name="layers" size={14} color="#0ea5e9" />
-              <Text className="text-primary-600 text-xs font-semibold">
-                My Listings
-              </Text>
+              <Feather name="layers" size={15} color="#0ea5e9" />
+              <Text className="text-primary-600 text-sm font-semibold">My Listings</Text>
             </TouchableOpacity>
           </View>
         )}
 
+        {/* Search bar */}
         <View className="flex-row items-center gap-2">
-          <View className="flex-1 flex-row items-center bg-slate-100 rounded-xl px-3 py-2.5">
+          <View className="flex-1 flex-row items-center bg-slate-100 rounded-2xl px-3 py-3">
             <Feather name="search" size={18} color="#64748b" />
             <TextInput
               className="flex-1 ml-2 text-base text-slate-900"
@@ -193,22 +264,15 @@ export default function HomeScreen() {
               returnKeyType="search"
             />
             {searchCity.length > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  clearFilter("city");
-                }}
-              >
+              <TouchableOpacity onPress={() => clearFilter("city")}>
                 <Feather name="x" size={18} color="#94a3b8" />
               </TouchableOpacity>
             )}
           </View>
 
-          {/* View toggle */}
           <TouchableOpacity
-            className="bg-slate-100 rounded-xl p-2.5"
-            onPress={() =>
-              setViewMode(viewMode === "list" ? "map" : "list")
-            }
+            className="bg-slate-100 rounded-2xl p-3"
+            onPress={() => setViewMode(viewMode === "list" ? "map" : "list")}
           >
             <Feather
               name={viewMode === "list" ? "map" : "list"}
@@ -217,9 +281,8 @@ export default function HomeScreen() {
             />
           </TouchableOpacity>
 
-          {/* Filter button */}
           <TouchableOpacity
-            className="bg-slate-100 rounded-xl p-2.5"
+            className="bg-slate-100 rounded-2xl p-3"
             onPress={openFilters}
           >
             <Feather name="sliders" size={20} color="#64748b" />
@@ -233,7 +296,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ---- Filter chips ---- */}
+        {/* Active filter chips */}
         {activeChips.length > 0 && (
           <ScrollView
             horizontal
@@ -247,19 +310,12 @@ export default function HomeScreen() {
                 onPress={() => clearFilter(chip.key)}
                 className="flex-row items-center bg-primary-50 rounded-full px-2.5 py-1 gap-1"
               >
-                <Text className="text-primary-700 text-xs font-medium">
-                  {chip.label}
-                </Text>
+                <Text className="text-primary-700 text-xs font-medium">{chip.label}</Text>
                 <Feather name="x" size={12} color="#0369a1" />
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              onPress={clearFilters}
-              className="flex-row items-center rounded-full px-2.5 py-1"
-            >
-              <Text className="text-red-500 text-xs font-semibold">
-                Clear All
-              </Text>
+            <TouchableOpacity onPress={clearFilters} className="rounded-full px-2.5 py-1">
+              <Text className="text-red-500 text-xs font-semibold">Clear All</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -272,49 +328,61 @@ export default function HomeScreen() {
           <Text className="text-slate-400 mt-3">Loading listings...</Text>
         </View>
       ) : viewMode === "list" ? (
-        /* ---------- List View ---------- */
         <FlatList
           data={listings || []}
           keyExtractor={(item: any) => item.id}
-          renderItem={({ item }: { item: any }) => (
-            <ListingCard listing={item} />
-          )}
-          contentContainerStyle={{ padding: 16, paddingBottom: 80 }}
+          renderItem={({ item }: { item: any }) => <ListingCard listing={item} />}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           onRefresh={refetch}
           refreshing={isRefetching}
           ListHeaderComponent={
-            <Text className="text-slate-500 text-sm mb-3">
-              {(listings || []).length} listing
-              {(listings || []).length !== 1 ? "s" : ""} found
-            </Text>
+            <View>
+              {/* Smart insight cards */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mb-5 -mx-0"
+                contentContainerStyle={{ paddingRight: 4 }}
+              >
+                {INSIGHT_CARDS.map(({ key, ...cardProps }) => (
+                  <InsightCard key={key} {...cardProps} />
+                ))}
+              </ScrollView>
+
+              <Text className="text-slate-500 text-sm mb-3">
+                {(listings || []).length} listing
+                {(listings || []).length !== 1 ? "s" : ""} found
+              </Text>
+            </View>
           }
           ListEmptyComponent={
             <View className="items-center justify-center py-20">
               <Feather name="inbox" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-4 text-base">
-                No listings found
-              </Text>
-              <Text className="text-slate-400 text-sm">
-                Try adjusting your search
-              </Text>
+              <Text className="text-slate-400 mt-4 text-base">No listings found</Text>
+              <Text className="text-slate-400 text-sm">Try adjusting your search</Text>
             </View>
           }
         />
       ) : (
-        /* ---------- Map View (react-leaflet on web, react-native-maps on native) ---------- */
         <ListingsMap
           listings={markersData}
           onPress={(id: string) => router.push(`/listing/${id}`)}
         />
       )}
 
-      {/* ============ FAB - Post Listing (hidden in map mode; map has its own locate button) ============ */}
+      {/* FAB */}
       {viewMode === "list" && (
         <TouchableOpacity
           onPress={() => router.push("/listing/create")}
-          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-lg"
-          style={{ elevation: 8 }}
-          activeOpacity={0.8}
+          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
+          style={{
+            elevation: 8,
+            shadowColor: "#0ea5e9",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.4,
+            shadowRadius: 12,
+          }}
+          activeOpacity={0.85}
         >
           <Feather name="plus" size={26} color="#fff" />
         </TouchableOpacity>
@@ -329,11 +397,8 @@ export default function HomeScreen() {
       >
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-3xl max-h-[85%]">
-            {/* Header */}
             <View className="flex-row items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
-              <Text className="text-lg font-bold text-slate-900">
-                Filters
-              </Text>
+              <Text className="text-lg font-bold text-slate-900">Filters</Text>
               <TouchableOpacity onPress={applyAndClose}>
                 <Feather name="x" size={22} color="#64748b" />
               </TouchableOpacity>
@@ -344,10 +409,7 @@ export default function HomeScreen() {
               contentContainerStyle={{ paddingBottom: 32 }}
               showsVerticalScrollIndicator={false}
             >
-              {/* ---- City ---- */}
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                City
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">City</Text>
               <TextInput
                 className="bg-slate-100 rounded-xl px-3 py-2.5 text-base text-slate-900"
                 placeholder="e.g. San Francisco"
@@ -356,7 +418,6 @@ export default function HomeScreen() {
                 onChangeText={handleCityChange}
               />
 
-              {/* ---- Price Range ---- */}
               <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
                 Price Range ($/mo)
               </Text>
@@ -379,10 +440,7 @@ export default function HomeScreen() {
                 />
               </View>
 
-              {/* ---- Room Type ---- */}
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Room Type
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Room Type</Text>
               <View className="flex-row flex-wrap gap-2">
                 {ROOM_TYPES.map((rt) => {
                   const active = listingFilters.room_type === rt.value;
@@ -390,10 +448,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={rt.value}
                       onPress={() =>
-                        updateFilter(
-                          "room_type",
-                          active ? undefined : rt.value,
-                        )
+                        updateFilter("room_type", active ? undefined : rt.value)
                       }
                       className={`rounded-full px-3.5 py-2 border ${
                         active
@@ -413,10 +468,7 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* ---- Property Type ---- */}
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Property Type
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Property Type</Text>
               <View className="flex-row flex-wrap gap-2">
                 {PROPERTY_TYPES.map((pt) => {
                   const active = listingFilters.property_type === pt.value;
@@ -424,10 +476,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={pt.value}
                       onPress={() =>
-                        updateFilter(
-                          "property_type",
-                          active ? undefined : pt.value,
-                        )
+                        updateFilter("property_type", active ? undefined : pt.value)
                       }
                       className={`rounded-full px-3.5 py-2 border ${
                         active
@@ -447,25 +496,18 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* ---- Utilities Included ---- */}
               <View className="flex-row items-center justify-between mt-5">
-                <Text className="text-sm font-semibold text-slate-700">
-                  Utilities Included
-                </Text>
+                <Text className="text-sm font-semibold text-slate-700">Utilities Included</Text>
                 <Switch
                   value={listingFilters.utilities_included === true}
                   onValueChange={(val) =>
-                    updateFilter(
-                      "utilities_included",
-                      val ? true : undefined,
-                    )
+                    updateFilter("utilities_included", val ? true : undefined)
                   }
                   trackColor={{ false: "#e2e8f0", true: "#0ea5e9" }}
                   thumbColor={Platform.OS === "android" ? "#fff" : undefined}
                 />
               </View>
 
-              {/* ---- Minimum Trust Band ---- */}
               <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
                 Minimum Trust Score
               </Text>
@@ -476,10 +518,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={band}
                       onPress={() =>
-                        updateFilter(
-                          "min_trust",
-                          active ? undefined : band,
-                        )
+                        updateFilter("min_trust", active ? undefined : band)
                       }
                       className={`flex-1 rounded-xl py-2.5 items-center border ${
                         active
@@ -499,10 +538,7 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* ---- Sort By ---- */}
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Sort By
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Sort By</Text>
               <View className="flex-row flex-wrap gap-2">
                 {SORT_OPTIONS.map((opt) => {
                   const active = listingFilters.sort_by === opt.value;
@@ -510,10 +546,7 @@ export default function HomeScreen() {
                     <TouchableOpacity
                       key={opt.value}
                       onPress={() =>
-                        updateFilter(
-                          "sort_by",
-                          active ? undefined : opt.value,
-                        )
+                        updateFilter("sort_by", active ? undefined : opt.value)
                       }
                       className={`rounded-full px-3.5 py-2 border ${
                         active
@@ -533,10 +566,7 @@ export default function HomeScreen() {
                 })}
               </View>
 
-              {/* ---- Available From ---- */}
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Available From
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Available From</Text>
               <TextInput
                 className="bg-slate-100 rounded-xl px-3 py-2.5 text-base text-slate-900"
                 placeholder="YYYY-MM-DD"
@@ -545,7 +575,6 @@ export default function HomeScreen() {
                 onChangeText={setDraftAvailableFrom}
               />
 
-              {/* ---- Action Buttons ---- */}
               <View className="flex-row gap-3 mt-6">
                 <TouchableOpacity
                   onPress={() => {
@@ -556,17 +585,13 @@ export default function HomeScreen() {
                   }}
                   className="flex-1 border border-slate-200 rounded-xl py-3 items-center"
                 >
-                  <Text className="text-slate-600 font-semibold">
-                    Clear All
-                  </Text>
+                  <Text className="text-slate-600 font-semibold">Clear All</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={applyAndClose}
                   className="flex-1 bg-primary-500 rounded-xl py-3 items-center"
                 >
-                  <Text className="text-white font-semibold">
-                    Apply Filters
-                  </Text>
+                  <Text className="text-white font-semibold">Apply Filters</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>

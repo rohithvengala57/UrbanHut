@@ -57,6 +57,8 @@ class InterestDetailResponse(InterestResponse):
     applicant_occupation: str | None = None
     applicant_city: str | None = None
     listing_title: str | None = None
+    match_percentage: int | None = None
+    match_reasons: list[str] | None = None
 
 
 class CompatibilityResponse(BaseModel):
