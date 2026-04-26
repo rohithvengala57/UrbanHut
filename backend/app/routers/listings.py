@@ -15,6 +15,8 @@ from app.models.household import Household
 from app.models.listing import Listing
 from app.models.match import MatchInterest
 from app.models.user import User
+from app.models.inquiry import ListingInquiry
+from app.schemas.inquiry import InquiryCreate, InquiryResponse
 from app.schemas.listing import (
     FunnelStep,
     ListingCreate,
@@ -351,6 +353,22 @@ async def get_my_listings(
         response.append(resp)
 
     return response
+
+
+# ─── Nearby listings count (insight card) ────────────────────────────────────
+@router.get("/nearby-count")
+async def nearby_count(
+    city: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the number of active listings in the given city. Used for home insight cards."""
+    result = await db.execute(
+        select(func.count(Listing.id)).where(
+            and_(Listing.status == "active", Listing.city.ilike(f"%{city}%"))
+        )
+    )
+    count = result.scalar_one()
+    return {"city": city, "count": count}
 
 
 # ─── Single listing (public) ─────────────────────────────────────────────────
@@ -729,6 +747,40 @@ async def host_decide_interest(
         applicant_city=applicant.current_city if applicant else None,
         listing_title=listing.title,
     )
+
+
+# ─── Inquiry / Contact host ──────────────────────────────────────────────────
+@router.post("/{listing_id}/inquiries", response_model=InquiryResponse, status_code=status.HTTP_201_CREATED)
+async def create_inquiry(
+    listing_id: uuid.UUID,
+    data: InquiryCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Submit a contact inquiry to a listing's host.
+    sender_user_id must be a valid user id.
+    """
+    listing_result = await db.execute(select(Listing).where(Listing.id == listing_id))
+    listing = listing_result.scalar_one_or_none()
+    if not listing:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
+
+    inquiry = ListingInquiry(
+        listing_id=listing_id,
+        sender_user_id=data.sender_user_id,
+        message=data.message,
+    )
+    db.add(inquiry)
+    await db.flush()
+    await db.refresh(inquiry)
+
+    log.info(
+        "listing_inquiry_created",
+        listing_id=str(listing_id),
+        sender_user_id=str(data.sender_user_id),
+        inquiry_id=str(inquiry.id),
+    )
+    return inquiry
 
 
 # ─── Delete listing ──────────────────────────────────────────────────────────
