@@ -16,6 +16,7 @@ from app.models.match import MatchInterest
 from app.models.user import User
 from app.models.user_search_preferences import UserSearchPreferences
 from app.schemas.user import UserProfileUpdate, UserPublicResponse, UserResponse
+from app.services.analytics import track_backend_event
 from app.utils.s3 import avatar_key, upload_bytes
 
 
@@ -48,10 +49,40 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
 ):
     update_data = data.model_dump(exclude_unset=True)
+    was_profile_completed = bool(
+        current_user.onboarding_metadata
+        and "steps" in current_user.onboarding_metadata
+        and current_user.onboarding_metadata["steps"].get("profile_completed")
+    )
     for field, value in update_data.items():
         setattr(current_user, field, value)
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        # Define profile completion as having at least bio, occupation and phone
+        if current_user.bio and current_user.occupation and current_user.phone:
+            if not current_user.onboarding_metadata["steps"].get("profile_completed"):
+                current_user.onboarding_metadata["steps"]["profile_completed"] = True
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(current_user, "onboarding_metadata")
+
     db.add(current_user)
     await db.flush()
+
+    now_profile_completed = bool(
+        current_user.onboarding_metadata
+        and "steps" in current_user.onboarding_metadata
+        and current_user.onboarding_metadata["steps"].get("profile_completed")
+    )
+    if now_profile_completed and not was_profile_completed:
+        await track_backend_event(
+            db,
+            event_name="profile_completed",
+            user_id=current_user.id,
+            source="backend",
+            properties={"completed_via": "users.patch_me"},
+        )
+
     result = await db.execute(
         select(User).options(selectinload(User.verifications)).where(User.id == current_user.id)
     )

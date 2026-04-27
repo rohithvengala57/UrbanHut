@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column('users', sa.Column('push_token', sa.Text(), nullable=True))
-    op.add_column('users', sa.Column('notification_prefs', postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    op.add_column('users', sa.Column('notification_prefs', sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

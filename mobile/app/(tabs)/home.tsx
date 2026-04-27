@@ -17,6 +17,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import ListingsMap from "@/components/map/ListingsMap";
+import { OnboardingChecklist } from "@/components/ui/OnboardingChecklist";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useListings } from "@/hooks/useListings";
 import { useAuthStore } from "@/stores/authStore";
@@ -403,6 +404,7 @@ export default function HomeScreen() {
           refreshing={isRefetching}
           ListHeaderComponent={
             <View>
+              <OnboardingChecklist />
               {/* Smart insight cards */}
               <ScrollView
                 horizontal

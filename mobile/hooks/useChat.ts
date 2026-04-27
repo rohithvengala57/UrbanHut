@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -65,8 +66,18 @@ export function useCreateRoom() {
       const response = await api.post(`/chat/rooms/from-match/${interestId}`);
       return response.data as ChatRoom;
     },
-    onSuccess: () => {
+    onSuccess: async (room) => {
       queryClient.invalidateQueries({ queryKey: ["chat-rooms"] });
+      await trackEvent("mutual_match_created", {
+        room_id: room.id ?? "unknown",
+        interest_id: room.interest_id,
+        listing_id: room.listing_id,
+      });
+      await trackEvent("chat_room_created", {
+        room_id: room.id ?? "unknown",
+        interest_id: room.interest_id,
+        listing_id: room.listing_id,
+      });
     },
   });
 }
@@ -90,9 +101,14 @@ export function useSendMessage(roomId: string) {
       const response = await api.post(`/chat/rooms/${roomId}/messages`, { body });
       return response.data as Message;
     },
-    onSuccess: () => {
+    onSuccess: async (message) => {
       queryClient.invalidateQueries({ queryKey: ["messages", roomId] });
       queryClient.invalidateQueries({ queryKey: ["chat-rooms"] });
+      await trackEvent("chat_message_sent", {
+        room_id: roomId || "unknown",
+        message_id: message.id,
+        message_length: message.body.length,
+      });
     },
   });
 }

@@ -15,6 +15,7 @@ from app.models.user import User
 from app.models.verification import Verification
 from app.schemas.verification import PhoneOTPRequest, PhoneOTPVerify
 from app.schemas.user import RefreshRequest, TokenResponse, UserCreate, UserLogin
+from app.services.analytics import extract_attribution_from_request, track_backend_event
 from app.services.trust_engine import TrustEngine, VERIFICATION_POINTS
 from app.utils.security import (
     create_access_token,
@@ -135,15 +136,51 @@ async def signup(data: UserCreate, request: Request, db: AsyncSession = Depends(
         log.warning("signup_email_conflict", email_domain=data.email.split("@")[-1])
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
+    referred_by_id = None
+    if data.referral_code:
+        ref_result = await db.execute(select(User).where(User.referral_code == data.referral_code))
+        referrer = ref_result.scalar_one_or_none()
+        if referrer:
+            referred_by_id = referrer.id
+            log.info("signup_referral_applied", referrer_id=str(referred_by_id))
+        else:
+            log.warning("signup_invalid_referral_code", code=data.referral_code)
+
+    # Generate a simple referral code: FIRSTNAME-RANDOM
+    safe_name = "".join(filter(str.isalnum, data.full_name.split()[0])).upper()[:8]
+    new_ref_code = f"{safe_name}-{random.randint(1000, 9999)}"
+
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         full_name=data.full_name,
         # Cold start: new users begin at 15 (not 0) so they appear presentable
         trust_score=15.0,
+        referral_code=new_ref_code,
+        referred_by_id=referred_by_id,
+        onboarding_metadata={
+            "steps": {
+                "profile_completed": False,
+                "email_verified": False,
+                "identity_verified": False,
+                "first_meaningful_action": False,
+            }
+        }
     )
     db.add(user)
     await db.flush()
+
+    request_touch = extract_attribution_from_request(request)
+    payload_touch = {
+        "source": data.utm_source,
+        "medium": data.utm_medium,
+        "campaign": data.utm_campaign,
+        "term": data.utm_term,
+        "content": data.utm_content,
+        "city": data.utm_city,
+    }
+    merged_touch = {k: v for k, v in {**(request_touch or {}), **payload_touch}.items() if v not in (None, "")}
+    touch = merged_touch or None
 
     log.info(
         "signup_user_created",
@@ -157,6 +194,19 @@ async def signup(data: UserCreate, request: Request, db: AsyncSession = Depends(
     refresh_token_raw = create_refresh_token(token_data)
 
     await _store_refresh_token(db, user.id, refresh_token_raw, request)
+
+    await track_backend_event(
+        db,
+        event_name="signup_completed",
+        user_id=user.id,
+        source="backend",
+        properties={
+            "referral_applied": referred_by_id is not None,
+            "referral_code_entered": bool(data.referral_code),
+        },
+        first_touch=touch,
+        last_touch=touch,
+    )
 
     log.info("signup_complete", user_id=str(user.id))
     return TokenResponse(
@@ -256,7 +306,12 @@ async def refresh_token(data: RefreshRequest, request: Request, db: AsyncSession
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked or not found")
 
-    if stored_token.expires_at < datetime.now(timezone.utc):
+    # Ensure stored_token.expires_at is timezone-aware for comparison
+    expires_at = stored_token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at < datetime.now(timezone.utc):
         log.warning(
             "token_refresh_failed",
             reason="token_expired",
@@ -369,6 +424,12 @@ async def verify_email(
         "email_verified",
         {"email": current_user.email},
     )
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        current_user.onboarding_metadata["steps"]["email_verified"] = True
+        sa.orm.attributes.flag_modified(current_user, "onboarding_metadata")
+
     log.info("email_verification_success", user_id=str(current_user.id))
     return {"message": "Email verified successfully"}
 

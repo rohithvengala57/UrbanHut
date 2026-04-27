@@ -12,6 +12,7 @@ from app.middleware.auth import get_current_user
 from app.models.expense import Expense, ExpenseSplit
 from app.models.user import User
 from app.schemas.expense import BalanceResponse, ExpenseCreate, ExpenseResponse, ExpenseSplitResponse
+from app.services.analytics import track_backend_event
 from app.utils.s3 import generate_presigned_upload_url, generate_presigned_download_url
 
 router = APIRouter()
@@ -84,6 +85,20 @@ async def create_expense(
             db.add(split)
 
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="expense_created",
+        user_id=current_user.id,
+        household_id=current_user.household_id,
+        source="backend",
+        properties={
+            "expense_id": str(expense.id),
+            "amount": data.amount,
+            "category": data.category,
+        },
+    )
+
     await db.refresh(expense)
     return expense
 

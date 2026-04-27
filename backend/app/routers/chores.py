@@ -24,6 +24,7 @@ from app.schemas.chore import (
     PointsSummary,
     ScheduleGenerateRequest,
 )
+from app.services.analytics import track_backend_event
 from app.services.chore_scheduler import ChoreScheduler, ScheduleImpossibleError
 
 router = APIRouter()
@@ -422,6 +423,19 @@ async def complete_chore(
         assignment.points_earned = float(chore.weight)
 
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="chore_completed",
+        user_id=current_user.id,
+        household_id=hh_id,
+        source="backend",
+        properties={
+            "assignment_id": str(assignment.id),
+            "chore_id": str(assignment.chore_id),
+        },
+    )
+
     await db.refresh(assignment)
     return assignment
 

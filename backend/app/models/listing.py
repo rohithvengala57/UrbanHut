@@ -2,18 +2,18 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
-    ARRAY,
     Boolean,
     Date,
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -58,11 +58,11 @@ class Listing(Base):
     current_occupants: Mapped[int] = mapped_column(Integer, default=0)
 
     # Amenities & rules
-    amenities: Mapped[dict] = mapped_column(JSONB, default=list)
-    house_rules: Mapped[dict] = mapped_column(JSONB, default=list)
+    amenities: Mapped[dict] = mapped_column(JSON, default=list)
+    house_rules: Mapped[dict] = mapped_column(JSON, default=list)
 
     # Media
-    images: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    images: Mapped[list[str]] = mapped_column(JSON, default=list)
 
     # Availability
     available_from: Mapped[date] = mapped_column(Date, nullable=False)
@@ -72,7 +72,7 @@ class Listing(Base):
     # Transit
     nearest_transit: Mapped[str | None] = mapped_column(String(200))
     transit_walk_mins: Mapped[int | None] = mapped_column(Integer)
-    nearby_universities: Mapped[list[str] | None] = mapped_column(ARRAY(String))
+    nearby_universities: Mapped[list[str] | None] = mapped_column(JSON)
 
     # Verification
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

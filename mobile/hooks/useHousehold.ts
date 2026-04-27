@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 
 // ─── Household ────────────────────────────────────────────────────────────────
@@ -38,9 +39,13 @@ export function useCreateHousehold() {
       const response = await api.post("/households", data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (household) => {
       queryClient.invalidateQueries({ queryKey: ["household"] });
       queryClient.invalidateQueries({ queryKey: ["household-members"] });
+      await trackEvent("household_created", {
+        household_id: household.id ?? "unknown",
+        max_members: household.max_members,
+      });
     },
   });
 }
@@ -52,9 +57,12 @@ export function useJoinHousehold() {
       const response = await api.post("/households/join", { invite_code });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (household) => {
       queryClient.invalidateQueries({ queryKey: ["household"] });
       queryClient.invalidateQueries({ queryKey: ["household-members"] });
+      await trackEvent("household_member_joined", {
+        household_id: household.id ?? "unknown",
+      });
     },
   });
 }
@@ -144,10 +152,15 @@ export function useAddExpense() {
       const response = await api.post("/expenses", data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (expense) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["balances"] });
       queryClient.invalidateQueries({ queryKey: ["my-splits"] });
+      await trackEvent("expense_created", {
+        expense_id: expense.id ?? "unknown",
+        amount: expense.amount,
+        category: expense.category,
+      });
     },
   });
 }
@@ -365,10 +378,14 @@ export function useCompleteChore() {
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (assignment) => {
       queryClient.invalidateQueries({ queryKey: ["chore-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["chore-points"] });
       queryClient.invalidateQueries({ queryKey: ["chore-performance"] });
+      await trackEvent("chore_completed", {
+        assignment_id: assignment.id ?? "unknown",
+        chore_id: assignment.chore_id,
+      });
     },
   });
 }

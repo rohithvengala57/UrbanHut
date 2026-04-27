@@ -17,6 +17,7 @@ from app.schemas.match import (
     InterestResponse,
     InterestUpdate,
 )
+from app.services.analytics import track_backend_event
 from app.services.matching_engine import MatchingEngine
 from app.services.notification_service import NotificationService
 
@@ -155,6 +156,8 @@ async def express_interest(
         to_user_id=data.to_user_id,
         message=data.message,
     )
+    listing = None
+    host = None
 
     if data.to_user_id:
         target_result = await db.execute(select(User).where(User.id == data.to_user_id))
@@ -176,6 +179,19 @@ async def express_interest(
 
     db.add(interest)
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="interest_sent",
+        user_id=current_user.id,
+        source="backend",
+        properties={
+            "interest_id": str(interest.id),
+            "listing_id": str(data.to_listing_id) if data.to_listing_id else None,
+            "to_user_id": str(data.to_user_id) if data.to_user_id else None,
+        },
+    )
+
     await db.refresh(interest)
 
     # Notify host about new interest (fire-and-forget)
@@ -187,6 +203,13 @@ async def express_interest(
             applicant_name=current_user.full_name,
             listing_title=listing.title,
         )
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        if not current_user.onboarding_metadata["steps"].get("first_meaningful_action"):
+            current_user.onboarding_metadata["steps"]["first_meaningful_action"] = True
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(current_user, "onboarding_metadata")
 
     return interest
 
@@ -306,6 +329,19 @@ async def update_interest(
 
     interest.status = target_status
     await db.flush()
+
+    if interest.status == "mutual":
+        await track_backend_event(
+            db,
+            event_name="mutual_match_created",
+            user_id=interest.from_user_id,
+            source="backend",
+            properties={
+                "interest_id": str(interest.id),
+                "listing_id": str(interest.to_listing_id) if interest.to_listing_id else None,
+            },
+        )
+
     await db.refresh(interest)
     return interest
 

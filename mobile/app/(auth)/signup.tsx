@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { trackEvent } from "@/lib/analytics";
 import { useAuthStore } from "@/stores/authStore";
 
 export default function SignupScreen() {
@@ -20,10 +21,17 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [trackedStart, setTrackedStart] = useState(false);
   const signup = useAuthStore((s) => s.signup);
 
   const handleSignup = async () => {
+    if (!trackedStart) {
+      setTrackedStart(true);
+      void trackEvent("signup_started", { method: "email_password" });
+    }
+
     if (!fullName || !email || !password) {
       Alert.alert("Error", "Please fill in all fields");
       return;
@@ -44,8 +52,13 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      await signup(email.trim().toLowerCase(), password, fullName.trim());
-      router.replace("/(tabs)/home");
+      await signup(
+        email.trim().toLowerCase(),
+        password,
+        fullName.trim(),
+        referralCode.trim() || undefined
+      );
+      router.replace("/onboarding/welcome");
     } catch (error: any) {
       Alert.alert("Signup Failed", error.response?.data?.detail || "Something went wrong");
     } finally {
@@ -103,6 +116,13 @@ export default function SignupScreen() {
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 secureTextEntry
+              />
+              <Input
+                label="Referral Code (Optional)"
+                placeholder="ENTER-CODE"
+                value={referralCode}
+                onChangeText={setReferralCode}
+                autoCapitalize="characters"
               />
             </View>
 

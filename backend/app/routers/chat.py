@@ -19,6 +19,7 @@ from app.schemas.chat import (
     MessageCreate,
     MessageResponse,
 )
+from app.services.analytics import track_backend_event
 
 router = APIRouter()
 
@@ -191,6 +192,15 @@ async def create_or_get_room(
     )
     db.add(room)
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="chat_room_created",
+        user_id=current_user.id,
+        source="backend",
+        properties={"room_id": str(room.id)},
+    )
+
     await db.refresh(room)
 
     other_id = user_b if current_user.id == user_a else user_a
@@ -277,6 +287,15 @@ async def send_message(
     )
     db.add(msg)
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="chat_message_sent",
+        user_id=current_user.id,
+        source="backend",
+        properties={"room_id": str(room_id), "message_id": str(msg.id)},
+    )
+
     await db.refresh(msg)
     return msg
 

@@ -18,6 +18,7 @@ import {
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 
 const DRAFT_KEY = "listing_create_draft";
@@ -408,7 +409,7 @@ export default function CreateListingScreen() {
 
     setLoading(true);
     try {
-      await api.post("/listings/", {
+      const response = await api.post("/listings/", {
         ...form,
         images,
         rent_monthly: rentMonthly * 100,
@@ -428,6 +429,17 @@ export default function CreateListingScreen() {
         nearby_universities: form.nearby_universities
           ? form.nearby_universities.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
+      });
+      const listingId = response.data.id ?? response.data.listing_id ?? "unknown";
+      await trackEvent("listing_created", {
+        listing_id: listingId,
+        city: response.data.city ?? form.city,
+        room_type: response.data.room_type ?? form.room_type,
+      });
+      await trackEvent("listing_published", {
+        listing_id: listingId,
+        city: response.data.city ?? form.city,
+        room_type: response.data.room_type ?? form.room_type,
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["listings"] }),

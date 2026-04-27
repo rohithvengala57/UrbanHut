@@ -1,5 +1,8 @@
+import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+
+import { gradients } from "@/constants/theme";
 
 interface ButtonProps {
   title: string;
@@ -20,20 +23,20 @@ export function Button({
   disabled = false,
   icon,
 }: ButtonProps) {
-  const baseStyle = "rounded-xl flex-row items-center justify-center";
+  const baseStyle = "rounded-2xl overflow-hidden flex-row items-center justify-center";
   const sizeStyles = {
     sm: "px-4 py-2",
     md: "px-6 py-3",
     lg: "px-8 py-4",
   };
   const variantStyles = {
-    primary: "bg-primary-500",
+    primary: "",
     secondary: "bg-slate-700",
     outline: "border-2 border-primary-500",
     ghost: "",
   };
   const textVariantStyles = {
-    primary: "text-white font-semibold",
+    primary: "text-white font-bold",
     secondary: "text-white font-semibold",
     outline: "text-primary-500 font-semibold",
     ghost: "text-primary-500 font-medium",
@@ -44,20 +47,41 @@ export function Button({
     lg: "text-lg",
   };
 
+  const content = (
+    <View className="flex-row items-center gap-2">
+      {loading ? (
+        <ActivityIndicator color={variant === "primary" || variant === "secondary" ? "#fff" : "#0ea5e9"} />
+      ) : (
+        <>
+          {icon}
+          <Text className={`${textVariantStyles[variant]} ${textSizeStyles[size]}`}>{title}</Text>
+        </>
+      )}
+    </View>
+  );
+
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={disabled || loading}
-      className={`${baseStyle} ${sizeStyles[size]} ${variantStyles[variant]} ${disabled ? "opacity-50" : ""}`}
+      className={`${baseStyle} ${disabled ? "opacity-50" : ""}`}
+      activeOpacity={0.85}
     >
-      {loading ? (
-        <ActivityIndicator color={variant === "primary" ? "#fff" : "#0ea5e9"} />
+      {variant === "primary" ? (
+        <LinearGradient
+          colors={gradients.primary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          className={`${sizeStyles[size]} w-full items-center justify-center`}
+        >
+          {content}
+        </LinearGradient>
       ) : (
-        <View className="flex-row items-center gap-2">
-          {icon}
-          <Text className={`${textVariantStyles[variant]} ${textSizeStyles[size]}`}>{title}</Text>
+        <View className={`${sizeStyles[size]} ${variantStyles[variant]} w-full items-center justify-center`}>
+          {content}
         </View>
       )}
     </TouchableOpacity>
   );
 }
+

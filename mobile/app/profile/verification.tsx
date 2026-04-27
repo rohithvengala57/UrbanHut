@@ -20,6 +20,7 @@ import {
   useSubmitVerification,
   useVerifyPhoneOTP,
 } from "@/hooks/useVerifications";
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -88,6 +89,7 @@ export default function VerificationScreen() {
 
   const handleVerifyEmail = async () => {
     try {
+      await trackEvent("verification_started", { verification_type: "email" });
       const res = await fetchEmailCode();
       Alert.alert(
         "Verify Email",
@@ -115,6 +117,7 @@ export default function VerificationScreen() {
     }
 
     try {
+      await trackEvent("verification_started", { verification_type: "phone" });
       const res = await requestPhoneOTP.mutateAsync(phone.trim());
       setActiveModal("phone_verify");
       Alert.alert(
@@ -136,6 +139,10 @@ export default function VerificationScreen() {
       await verifyPhoneOTP.mutateAsync({ phone: phone.trim(), code: phoneCode });
       await refetch();
       await loadUser();
+      await trackEvent("verification_submitted", {
+        verification_type: "phone",
+        status: "verified",
+      });
       setPhoneCode("");
       setActiveModal(null);
       Alert.alert("Phone Verified", "Your phone number has been verified.");
@@ -151,6 +158,7 @@ export default function VerificationScreen() {
     }
 
     try {
+      await trackEvent("verification_started", { verification_type: type });
       if (type === "id") {
         await submitIdVerification.mutateAsync({
           document_url: documentUrl.trim(),
@@ -163,6 +171,10 @@ export default function VerificationScreen() {
         });
       }
       await refetch();
+      await trackEvent("verification_submitted", {
+        verification_type: type,
+        status: "pending_review",
+      });
       resetDocumentState();
       setActiveModal(null);
       Alert.alert(

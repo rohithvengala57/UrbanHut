@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import sqlalchemy as sa
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -368,6 +369,11 @@ async def review_verification(
     if data.status == "approved":
         verification.verified_at = datetime.now(timezone.utc)
         await _award_verification_points(db, verification_user, verification)
+
+        # Update onboarding metadata
+        if verification.type == "id" and verification_user.onboarding_metadata and "steps" in verification_user.onboarding_metadata:
+            verification_user.onboarding_metadata["steps"]["identity_verified"] = True
+            sa.orm.attributes.flag_modified(verification_user, "onboarding_metadata")
 
         # Data retention: after approval we keep the key for 30 days then a background
         # job should call s3.delete_object(verification.document_url). Flag via metadata.

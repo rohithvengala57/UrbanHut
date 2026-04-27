@@ -104,7 +104,7 @@ def downgrade() -> None:
     op.add_column("users", sa.Column("current_state", sa.String(length=50), nullable=True))
     op.add_column(
         "users",
-        sa.Column("looking_in", postgresql.ARRAY(sa.String()), nullable=True),
+        sa.Column("looking_in", sa.JSON(), nullable=True),
     )
     op.add_column("users", sa.Column("budget_min", sa.Integer(), nullable=True))
     op.add_column("users", sa.Column("budget_max", sa.Integer(), nullable=True))

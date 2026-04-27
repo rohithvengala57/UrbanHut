@@ -19,6 +19,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { colors } from "@/constants/theme";
 import { formatRelativeDate } from "@/lib/format";
 import api from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
@@ -45,19 +46,10 @@ const typeIcons: Record<string, keyof typeof Feather.glyphMap> = {
   recommendation: "thumbs-up",
 };
 
-const typeColors: Record<string, string> = {
-  tip: "#f59e0b",
-  question: "#8b5cf6",
-  event: "#0ea5e9",
-  recommendation: "#22c55e",
+const getPostTypeStyles = (type: string) => {
+  return colors.community[type as keyof typeof colors.community] || { text: colors.slate[500], bg: colors.slate[50] };
 };
 
-const typeBg: Record<string, string> = {
-  tip: "#fef3c7",
-  question: "#ede9fe",
-  event: "#e0f2fe",
-  recommendation: "#dcfce7",
-};
 
 interface Reply {
   id: string;
@@ -350,8 +342,7 @@ export default function CommunityScreen() {
           onRefresh={refetch}
           refreshing={isRefetching}
           renderItem={({ item }) => {
-            const color = typeColors[item.type] || "#64748b";
-            const bg = typeBg[item.type] || "#f8fafc";
+            const styles = getPostTypeStyles(item.type);
             const icon = typeIcons[item.type] || "message-circle";
             return (
               <Card className="mb-3">
@@ -376,13 +367,14 @@ export default function CommunityScreen() {
                     {/* Type tag */}
                     <View
                       className="flex-row items-center gap-1.5 rounded-full px-2.5 py-1 self-start mb-2"
-                      style={{ backgroundColor: bg }}
+                      style={{ backgroundColor: styles.bg }}
                     >
-                      <Feather name={icon} size={11} color={color} />
-                      <Text className="text-xs font-bold uppercase" style={{ color }}>
+                      <Feather name={icon} size={11} color={styles.text} />
+                      <Text className="text-xs font-bold uppercase" style={{ color: styles.text }}>
                         {item.type}
                       </Text>
                     </View>
+
 
                     <Text className="font-bold text-slate-900 text-base mb-1">{item.title}</Text>
                     <Text className="text-slate-600 text-sm" numberOfLines={4}>
@@ -500,22 +492,21 @@ export default function CommunityScreen() {
               <View className="flex-row gap-2 mb-5">
                 {CREATE_TYPES.map((t) => {
                   const isActive = createForm.type === t.key;
-                  const color = typeColors[t.key] || "#64748b";
-                  const bg = typeBg[t.key] || "#f8fafc";
+                  const styles = getPostTypeStyles(t.key);
                   return (
                     <TouchableOpacity
                       key={t.key}
                       onPress={() => setCreateForm((p) => ({ ...p, type: t.key }))}
                       className="flex-1 py-3 rounded-2xl items-center border"
                       style={{
-                        backgroundColor: isActive ? bg : "#fff",
-                        borderColor: isActive ? color : "#e2e8f0",
+                        backgroundColor: isActive ? styles.bg : "#fff",
+                        borderColor: isActive ? styles.text : "#e2e8f0",
                       }}
                     >
-                      <Feather name={t.icon} size={18} color={isActive ? color : "#94a3b8"} />
+                      <Feather name={t.icon} size={18} color={isActive ? styles.text : "#94a3b8"} />
                       <Text
                         className="text-xs font-semibold mt-1"
-                        style={{ color: isActive ? color : "#94a3b8" }}
+                        style={{ color: isActive ? styles.text : "#94a3b8" }}
                       >
                         {t.label}
                       </Text>
@@ -523,6 +514,7 @@ export default function CommunityScreen() {
                   );
                 })}
               </View>
+
 
               <Text className="text-sm font-medium text-slate-700 mb-1">Title *</Text>
               <TextInput

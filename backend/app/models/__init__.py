@@ -1,3 +1,4 @@
+from app.models.analytics import TelemetryEvent, UserAttribution
 from app.models.appointment import Appointment
 from app.models.inquiry import ListingInquiry
 from app.models.chat import ChatMessage, ChatRoom
@@ -20,6 +21,8 @@ from app.models.verification import Verification
 
 __all__ = [
     "User",
+    "TelemetryEvent",
+    "UserAttribution",
     "ListingInquiry",
     "UserProfile",
     "UserSearchPreferences",

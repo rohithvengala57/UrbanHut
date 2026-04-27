@@ -10,6 +10,7 @@ from app.middleware.auth import get_current_user
 from app.models.household import Household
 from app.models.user import User
 from app.schemas.household import HouseholdCreate, HouseholdJoin, HouseholdResponse, MemberTrustScore
+from app.services.analytics import track_backend_event
 
 router = APIRouter()
 
@@ -35,6 +36,16 @@ async def create_household(
 
     current_user.household_id = household.id
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="household_created",
+        user_id=current_user.id,
+        household_id=household.id,
+        source="backend",
+        properties={"household_id": str(household.id)},
+    )
+
     await db.refresh(household)
     return household
 
@@ -92,6 +103,16 @@ async def join_household(
 
     current_user.household_id = household.id
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="household_member_joined",
+        user_id=current_user.id,
+        household_id=household.id,
+        source="backend",
+        properties={"household_id": str(household.id)},
+    )
+
     await db.refresh(household)
     return household
 

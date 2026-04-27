@@ -28,6 +28,7 @@ from app.schemas.listing import (
     RoommateCard,
 )
 from app.schemas.match import InterestDetailResponse, InterestStatus
+from app.services.analytics import track_backend_event
 from app.services.matching_engine import MatchingEngine
 from app.services.notification_service import NotificationService
 from app.utils.geocoding import geocode_address
@@ -607,6 +608,26 @@ async def create_listing(
         listing_id=str(listing.id),
         geocoded=listing.latitude is not None,
     )
+
+    await track_backend_event(
+        db,
+        event_name="listing_created",
+        user_id=current_user.id,
+        source="backend",
+        properties={
+            "listing_id": str(listing.id),
+            "city": listing.city,
+            "state": listing.state,
+        },
+    )
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        if not current_user.onboarding_metadata["steps"].get("first_meaningful_action"):
+            current_user.onboarding_metadata["steps"]["first_meaningful_action"] = True
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(current_user, "onboarding_metadata")
+
     return listing
 
 
@@ -652,6 +673,20 @@ async def update_listing_status(
 
     listing.status = data.status.value
     await db.flush()
+
+    if listing.status == "active":
+        await track_backend_event(
+            db,
+            event_name="listing_published",
+            user_id=current_user.id,
+            source="backend",
+            properties={
+                "listing_id": str(listing.id),
+                "city": listing.city,
+                "state": listing.state,
+            },
+        )
+
     await db.refresh(listing)
     return listing
 
@@ -728,6 +763,16 @@ async def host_decide_interest(
     )
 
     await db.flush()
+
+    if interest.status == "mutual":
+        await track_backend_event(
+            db,
+            event_name="mutual_match_created",
+            user_id=interest.from_user_id,
+            source="backend",
+            properties={"interest_id": str(interest.id), "listing_id": str(listing.id)},
+        )
+
     await db.refresh(interest)
 
     # Return with applicant details
