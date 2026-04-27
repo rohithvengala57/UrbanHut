@@ -17,6 +17,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import ListingsMap from "@/components/map/ListingsMap";
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useListings } from "@/hooks/useListings";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -373,10 +374,7 @@ export default function HomeScreen() {
 
       {/* ============ Content ============ */}
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#0ea5e9" />
-          <Text className="text-slate-400 mt-3">Loading listings...</Text>
-        </View>
+        <SkeletonLoader count={4} style={{ padding: 16 }} />
       ) : isError ? (
         /* API error state */
         <View className="flex-1 items-center justify-center px-8">

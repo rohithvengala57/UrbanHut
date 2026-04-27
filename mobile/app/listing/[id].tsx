@@ -243,22 +243,31 @@ export default function ListingDetailScreen() {
                   />
                 )}
               />
-              {/* Page indicator */}
+              {/* Dot indicators */}
               {imageCount > 1 && (
                 <View
                   style={{
                     position: "absolute",
-                    bottom: 56,
-                    right: 14,
-                    backgroundColor: "rgba(0,0,0,0.55)",
-                    borderRadius: 12,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
+                    bottom: 60,
+                    left: 0,
+                    right: 0,
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
-                    {carouselIndex + 1} / {imageCount}
-                  </Text>
+                  {listing.images!.map((_: string, i: number) => (
+                    <View
+                      key={i}
+                      style={{
+                        width: i === carouselIndex ? 20 : 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: i === carouselIndex ? "#fff" : "rgba(255,255,255,0.45)",
+                      }}
+                    />
+                  ))}
                 </View>
               )}
             </>
