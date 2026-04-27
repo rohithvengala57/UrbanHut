@@ -209,7 +209,7 @@ class TrustEngine:
         if streak >= 10:
             score += 2.0
 
-        return max(0.0, min(score, PILLAR_WEIGHTS["financial"]))
+        return min(score, PILLAR_WEIGHTS["financial"])
 
     def _calc_household(self, events: list[TrustEvent]) -> float:
         household_events = [e for e in events if e.category == "household"]

@@ -295,7 +295,10 @@ async def refresh_token(data: RefreshRequest, request: Request, db: AsyncSession
         )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked or not found")
 
-    if stored_token.expires_at < datetime.now(timezone.utc):
+    token_expires_at = stored_token.expires_at
+    if token_expires_at.tzinfo is None:
+        token_expires_at = token_expires_at.replace(tzinfo=timezone.utc)
+    if token_expires_at < datetime.now(timezone.utc):
         log.warning(
             "token_refresh_failed",
             reason="token_expired",
