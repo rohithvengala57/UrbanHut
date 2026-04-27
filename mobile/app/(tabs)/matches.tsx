@@ -1,12 +1,13 @@
 import { Feather } from "@expo/vector-icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -17,6 +18,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { TrustBadge } from "@/components/trust/TrustBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useCreateRoom } from "@/hooks/useChat";
 import type { InterestDetail } from "@/hooks/useHostListings";
 import { useExpressInterest, useMyInterests } from "@/hooks/useListings";
@@ -45,8 +47,9 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 export default function MatchesScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("recommendations");
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
+  const queryClient = useQueryClient();
 
-  const { data: recommendations, isLoading: recsLoading } = useQuery({
+  const { data: recommendations, isLoading: recsLoading, isRefetching: recsRefetching, refetch: refetchRecs } = useQuery({
     queryKey: ["recommendations"],
     queryFn: async () => {
       const response = await api.get("/matching/recommendations");
@@ -62,22 +65,44 @@ export default function MatchesScreen() {
       (i: { to_listing_id: string | null }) => i.to_listing_id === listingId,
     );
     if (alreadySent) return;
-    expressInterest.mutate(
-      { to_listing_id: listingId },
-      {
-        onSuccess: () =>
-          Alert.alert("Interest Sent!", "The host will be notified of your interest."),
-        onError: (err: any) =>
-          Alert.alert("Error", err.response?.data?.detail || "Failed to send interest"),
-      },
-    );
+
+    const performMutation = () => {
+      expressInterest.mutate(
+        { to_listing_id: listingId },
+        {
+          onError: (err: any) =>
+            Alert.alert(
+              "Error",
+              err.response?.data?.detail || "Failed to send interest",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Retry", onPress: performMutation }
+              ]
+            ),
+        },
+      );
+    };
+
+    performMutation();
   };
 
-  const { data: receivedInterests, isLoading: inboxLoading } = useReceivedInterests(
-    inboxFilter === "all" ? undefined : inboxFilter,
-  );
+  const { data: allReceivedInterests, isLoading: inboxLoading, isRefetching: inboxRefetching, refetch: refetchInbox } = useReceivedInterests("all");
 
-  const { data: connections, isLoading: connectionsLoading } = useQuery({
+  const filteredInterests = useMemo(() => {
+    if (!allReceivedInterests) return [];
+    if (inboxFilter === "all") return allReceivedInterests;
+    return allReceivedInterests.filter(i => i.status === inboxFilter);
+  }, [allReceivedInterests, inboxFilter]);
+
+  const inboxCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allReceivedInterests?.length || 0 };
+    allReceivedInterests?.forEach(i => {
+      counts[i.status] = (counts[i.status] || 0) + 1;
+    });
+    return counts;
+  }, [allReceivedInterests]);
+
+  const { data: connections, isLoading: connectionsLoading, isRefetching: connectionsRefetching, refetch: refetchConnections } = useQuery({
     queryKey: ["connections"],
     queryFn: async () => {
       const response = await api.get("/matching/connections");
@@ -102,6 +127,12 @@ export default function MatchesScreen() {
         <View className="flex-row">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
+            const count = tab.key === "inbox" 
+              ? inboxCounts.new || 0 
+              : tab.key === "connections" 
+                ? connections?.length || 0 
+                : 0;
+            
             return (
               <TouchableOpacity
                 key={tab.key}
@@ -118,19 +149,10 @@ export default function MatchesScreen() {
                   >
                     {tab.label}
                   </Text>
-                  {tab.key === "inbox" &&
-                    receivedInterests &&
-                    receivedInterests.length > 0 && (
-                      <View className="bg-red-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
-                        <Text className="text-white text-[10px] font-bold">
-                          {receivedInterests.length}
-                        </Text>
-                      </View>
-                    )}
-                  {tab.key === "connections" && connections && connections.length > 0 && (
-                    <View className="bg-primary-500 rounded-full min-w-[18px] h-[18px] items-center justify-center px-1">
+                  {count > 0 && (
+                    <View className={`${tab.key === "inbox" ? "bg-red-500" : "bg-primary-500"} rounded-full min-w-[18px] h-[18px] items-center justify-center px-1`}>
                       <Text className="text-white text-[10px] font-bold">
-                        {connections.length}
+                        {count}
                       </Text>
                     </View>
                   )}
@@ -145,6 +167,8 @@ export default function MatchesScreen() {
         <RecommendationsTab
           recommendations={recommendations}
           isLoading={recsLoading}
+          isRefreshing={recsRefetching}
+          onRefresh={refetchRecs}
           myInterests={myInterests}
           expressInterest={expressInterest}
           onInterest={handleInterest}
@@ -153,8 +177,11 @@ export default function MatchesScreen() {
 
       {activeTab === "inbox" && (
         <InboxTab
-          interests={receivedInterests}
+          interests={filteredInterests}
+          counts={inboxCounts}
           isLoading={inboxLoading}
+          isRefreshing={inboxRefetching}
+          onRefresh={refetchInbox}
           filter={inboxFilter}
           onFilterChange={setInboxFilter}
         />
@@ -164,6 +191,8 @@ export default function MatchesScreen() {
         <ConnectionsTab
           connections={connections}
           isLoading={connectionsLoading}
+          isRefreshing={connectionsRefetching}
+          onRefresh={refetchConnections}
           onChat={handleChat}
           isChatLoading={createRoom.isPending}
         />
@@ -176,17 +205,21 @@ export default function MatchesScreen() {
 function RecommendationsTab({
   recommendations,
   isLoading,
+  isRefreshing,
+  onRefresh,
   myInterests,
   expressInterest,
   onInterest,
 }: {
   recommendations: any[] | undefined;
   isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
   myInterests: any[] | undefined;
   expressInterest: ReturnType<typeof useExpressInterest>;
   onInterest: (listingId: string) => void;
 }) {
-  if (isLoading) {
+  if (isLoading && !isRefreshing) {
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#0ea5e9" />
@@ -199,6 +232,19 @@ function RecommendationsTab({
       data={recommendations || []}
       keyExtractor={(item) => item.listing_id}
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+      }
+      onEndReached={() => {
+        // Since backend is limited to 20, we just show a message for now
+      }}
+      ListFooterComponent={
+        recommendations && recommendations.length > 0 ? (
+          <View className="py-6 items-center">
+            <Text className="text-slate-400 text-xs">No more recommendations for now</Text>
+          </View>
+        ) : null
+      }
       renderItem={({ item }) => {
         const sent = myInterests?.some(
           (i: { to_listing_id: string | null }) => i.to_listing_id === item.listing_id,
@@ -303,13 +349,15 @@ function RecommendationsTab({
         );
       }}
       ListEmptyComponent={
-        <View className="items-center justify-center py-20">
-          <Feather name="heart" size={48} color="#cbd5e1" />
-          <Text className="text-slate-400 mt-4 text-base">No recommendations yet</Text>
-          <Text className="text-slate-400 text-sm text-center mt-1">
-            Complete your profile to get matched with compatible roommates
-          </Text>
-        </View>
+        <EmptyState
+          icon="heart"
+          title="No recommendations yet"
+          message="Complete your profile to get matched with compatible roommates"
+          cta={{
+            label: "Complete Profile",
+            onPress: () => router.push("/profile/edit"),
+          }}
+        />
       }
     />
   );
@@ -318,12 +366,18 @@ function RecommendationsTab({
 /* ── Inbox tab ── */
 function InboxTab({
   interests,
+  counts,
   isLoading,
+  isRefreshing,
+  onRefresh,
   filter,
   onFilterChange,
 }: {
   interests: InterestDetail[] | undefined;
+  counts: Record<string, number>;
   isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
   filter: InboxFilter;
   onFilterChange: (f: InboxFilter) => void;
 }) {
@@ -336,11 +390,12 @@ function InboxTab({
       >
         {INBOX_FILTERS.map((f) => {
           const isActive = filter === f;
+          const count = counts[f] || 0;
           return (
             <TouchableOpacity
               key={f}
               onPress={() => onFilterChange(f)}
-              className={`rounded-full px-3.5 py-1.5 ${
+              className={`rounded-full px-3.5 py-1.5 flex-row items-center gap-1.5 ${
                 isActive ? "bg-primary-500" : "bg-white border border-slate-200"
               }`}
             >
@@ -351,12 +406,19 @@ function InboxTab({
               >
                 {f}
               </Text>
+              {count > 0 && (
+                <View className={`rounded-full px-1.5 py-0.5 ${isActive ? "bg-white/20" : "bg-slate-100"}`}>
+                  <Text className={`text-[10px] font-bold ${isActive ? "text-white" : "text-slate-500"}`}>
+                    {count}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
       </ScrollView>
 
-      {isLoading ? (
+      {isLoading && !isRefreshing ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0ea5e9" />
         </View>
@@ -365,15 +427,18 @@ function InboxTab({
           data={interests || []}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ padding: 16 }}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          }
           renderItem={({ item }) => <InboxCard interest={item} />}
           ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Feather name="inbox" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-4 text-base">No interests received</Text>
-              <Text className="text-slate-400 text-sm text-center mt-1">
-                When someone is interested in your listing, it will appear here
-              </Text>
-            </View>
+            <EmptyState
+              icon="inbox"
+              title="No interests received"
+              message={filter === "all" 
+                ? "When someone is interested in your listing, it will appear here"
+                : `No interests found with status "${filter}"`}
+            />
           }
         />
       )}
@@ -438,15 +503,19 @@ function InboxCard({ interest }: { interest: InterestDetail }) {
 function ConnectionsTab({
   connections,
   isLoading,
+  isRefreshing,
+  onRefresh,
   onChat,
   isChatLoading,
 }: {
   connections: InterestDetail[] | undefined;
   isLoading: boolean;
+  isRefreshing: boolean;
+  onRefresh: () => void;
   onChat: (interestId: string) => void;
   isChatLoading: boolean;
 }) {
-  if (isLoading) {
+  if (isLoading && !isRefreshing) {
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#0ea5e9" />
@@ -459,6 +528,9 @@ function ConnectionsTab({
       data={connections || []}
       keyExtractor={(item) => item.id}
       contentContainerStyle={{ padding: 16 }}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+      }
       renderItem={({ item }) => (
         <Card className="mb-3">
           <View className="flex-row items-center">
@@ -507,13 +579,11 @@ function ConnectionsTab({
         </Card>
       )}
       ListEmptyComponent={
-        <View className="items-center justify-center py-20">
-          <Feather name="users" size={48} color="#cbd5e1" />
-          <Text className="text-slate-400 mt-4 text-base">No connections yet</Text>
-          <Text className="text-slate-400 text-sm text-center mt-1">
-            When a match is accepted, you can start chatting here
-          </Text>
-        </View>
+        <EmptyState
+          icon="users"
+          title="No connections yet"
+          message="When a match is accepted, you can start chatting here"
+        />
       }
     />
   );

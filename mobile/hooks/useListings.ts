@@ -53,7 +53,37 @@ export function useExpressInterest() {
       const response = await api.post("/matching/interest", payload);
       return response.data;
     },
-    onSuccess: () => {
+    onMutate: async (newInterest) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ["my-interests"] });
+
+      // Snapshot the previous value
+      const previousInterests = queryClient.getQueryData<any[]>(["my-interests"]);
+
+      // Optimistically update to the new value
+      if (previousInterests) {
+        queryClient.setQueryData(["my-interests"], [
+          ...previousInterests,
+          {
+            id: "temp-id-" + Math.random(),
+            to_listing_id: newInterest.to_listing_id || null,
+            to_user_id: newInterest.to_user_id || null,
+            status: "new",
+            created_at: new Date().toISOString(),
+          }
+        ]);
+      }
+
+      return { previousInterests };
+    },
+    onError: (err, newInterest, context) => {
+      // Rollback to the previous value if mutation fails
+      if (context?.previousInterests) {
+        queryClient.setQueryData(["my-interests"], context.previousInterests);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to keep server and client in sync
       queryClient.invalidateQueries({ queryKey: ["my-interests"] });
       queryClient.invalidateQueries({ queryKey: ["connections"] });
     },

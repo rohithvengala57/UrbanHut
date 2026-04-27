@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,9 +12,15 @@ import {
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 
+import { EmptyState } from "@/components/ui/EmptyState";
 import api from "@/services/api";
 
 const CATEGORIES = ["All", "plumber", "electrician", "cleaner", "handyman", "mover", "painter"];
+const SORT_OPTIONS = [
+  { key: "rating", label: "Top Rated", icon: "star" },
+  { key: "reviews", label: "Most Reviews", icon: "message-circle" },
+  { key: "distance", label: "Closest", icon: "map-pin" },
+] as const;
 
 const CATEGORY_ICONS: Record<string, keyof typeof Feather.glyphMap> = {
   All: "grid",
@@ -47,23 +53,52 @@ type Provider = {
   verified: boolean;
 };
 
-function renderStars(rating: number) {
+function StarRating({ rating }: { rating: number }) {
   const full = Math.floor(rating);
-  return "★".repeat(full) + "☆".repeat(5 - full);
+  const hasHalf = rating % 1 >= 0.3 && rating % 1 <= 0.7;
+  const empty = 5 - full - (hasHalf ? 1 : 0);
+
+  return (
+    <View className="flex-row items-center gap-0.5">
+      {[...Array(full)].map((_, i) => (
+        <Feather key={`full-${i}`} name="star" size={12} color="#f59e0b" fill="#f59e0b" />
+      ))}
+      {hasHalf && (
+        <View className="relative">
+          <Feather name="star" size={12} color="#f59e0b" />
+          <View className="absolute top-0 left-0 w-1/2 overflow-hidden">
+             <Feather name="star" size={12} color="#f59e0b" fill="#f59e0b" />
+          </View>
+        </View>
+      )}
+      {[...Array(empty)].map((_, i) => (
+        <Feather key={`empty-${i}`} name="star" size={12} color="#e2e8f0" />
+      ))}
+    </View>
+  );
 }
 
 export default function ServicesScreen() {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [category, setCategory] = useState("All");
+  const [sortBy, setSortBy] = useState<typeof SORT_OPTIONS[number]["key"]>("rating");
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const { width } = useWindowDimensions();
-  const cardWidth = (width - 48) / 2; // 2-col grid with padding
+  const cardWidth = (width - 48) / 2;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const { data: providers, isLoading } = useQuery({
-    queryKey: ["services", search, category],
+    queryKey: ["services", debouncedSearch, category, sortBy],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (search) params.append("city", search);
+      if (debouncedSearch) params.append("city", debouncedSearch);
       if (category !== "All") params.append("category", category);
+      params.append("sort", sortBy);
       const res = await api.get(`/services/providers?${params.toString()}`);
       return res.data as Provider[];
     },
@@ -73,21 +108,52 @@ export default function ServicesScreen() {
     <View className="flex-1 bg-slate-50">
       {/* Search + filters */}
       <View className="bg-white px-4 pt-3 pb-3 border-b border-slate-100">
-        <View className="flex-row items-center bg-slate-100 rounded-2xl px-3 py-3 mb-3">
-          <Feather name="search" size={18} color="#64748b" />
-          <TextInput
-            className="flex-1 ml-2 text-base text-slate-900"
-            placeholder="Search by city..."
-            placeholderTextColor="#94a3b8"
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <TouchableOpacity onPress={() => setSearch("")}>
-              <Feather name="x" size={18} color="#94a3b8" />
-            </TouchableOpacity>
-          )}
+        <View className="flex-row items-center gap-2 mb-3">
+          <View className="flex-1 flex-row items-center bg-slate-100 rounded-2xl px-3 py-3">
+            <Feather name="search" size={18} color="#64748b" />
+            <TextInput
+              className="flex-1 ml-2 text-base text-slate-900"
+              placeholder="Search by city..."
+              placeholderTextColor="#94a3b8"
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")}>
+                <Feather name="x" size={18} color="#94a3b8" />
+              </TouchableOpacity>
+            )}
+          </View>
+          
+          <TouchableOpacity 
+            onPress={() => setShowSortMenu(!showSortMenu)}
+            className={`w-12 h-12 rounded-2xl items-center justify-center border ${showSortMenu ? "bg-primary-50 border-primary-500" : "bg-white border-slate-200"}`}
+          >
+            <Feather name="sliders" size={18} color={showSortMenu ? "#0ea5e9" : "#64748b"} />
+          </TouchableOpacity>
         </View>
+
+        {showSortMenu && (
+          <View className="flex-row gap-2 mb-3">
+            {SORT_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => {
+                  setSortBy(opt.key);
+                  setShowSortMenu(false);
+                }}
+                className={`flex-1 flex-row items-center justify-center gap-1.5 py-2 rounded-xl border ${
+                  sortBy === opt.key ? "bg-primary-50 border-primary-500" : "bg-white border-slate-100"
+                }`}
+              >
+                <Feather name={opt.icon} size={13} color={sortBy === opt.key ? "#0ea5e9" : "#94a3b8"} />
+                <Text className={`text-xs font-semibold ${sortBy === opt.key ? "text-primary-600" : "text-slate-500"}`}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <FlatList
           horizontal
@@ -149,7 +215,7 @@ export default function ServicesScreen() {
                   shadowRadius: 8,
                   elevation: 3,
                 }}
-                activeOpacity={0.85}
+                activeOpacity={0.7}
               >
                 {/* Category icon */}
                 <View
@@ -193,18 +259,20 @@ export default function ServicesScreen() {
 
                 {/* Rating */}
                 <View className="flex-row items-center justify-between">
-                  <Text className="text-amber-400 text-sm">{renderStars(item.rating)}</Text>
-                  <Text className="text-slate-400 text-xs">{item.review_count}</Text>
+                  <StarRating rating={item.rating} />
+                  <Text className="text-slate-400 text-[10px] font-medium">
+                    {item.review_count} reviews
+                  </Text>
                 </View>
               </TouchableOpacity>
             );
           }}
           ListEmptyComponent={
-            <View className="items-center py-20">
-              <Feather name="tool" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-4 text-base">No providers found</Text>
-              <Text className="text-slate-400 text-sm">Try searching a different city</Text>
-            </View>
+            <EmptyState
+              icon="tool"
+              title="No providers found"
+              message="Try searching a different city or changing filters"
+            />
           }
         />
       )}
