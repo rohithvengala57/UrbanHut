@@ -23,51 +23,6 @@ router = APIRouter()
 
 # ─── UH-204: Saved Listings ──────────────────────────────────────────────────
 
-@router.post("/listings/{listing_id}", response_model=SavedListingResponse, status_code=201)
-async def save_listing(
-    listing_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Save a listing. Idempotent — re-saving returns existing."""
-    existing = await db.execute(
-        select(SavedListing).where(
-            and_(SavedListing.user_id == current_user.id, SavedListing.listing_id == listing_id)
-        )
-    )
-    if found := existing.scalar_one_or_none():
-        return found
-
-    # Verify listing exists
-    listing_check = await db.execute(select(Listing.id).where(Listing.id == listing_id))
-    if not listing_check.scalar_one_or_none():
-        raise HTTPException(status_code=404, detail="Listing not found")
-
-    saved = SavedListing(user_id=current_user.id, listing_id=listing_id)
-    db.add(saved)
-    await db.flush()
-    await db.refresh(saved)
-    return saved
-
-
-@router.delete("/listings/{listing_id}", status_code=204)
-async def unsave_listing(
-    listing_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Unsave a listing."""
-    result = await db.execute(
-        select(SavedListing).where(
-            and_(SavedListing.user_id == current_user.id, SavedListing.listing_id == listing_id)
-        )
-    )
-    saved = result.scalar_one_or_none()
-    if not saved:
-        raise HTTPException(status_code=404, detail="Saved listing not found")
-    await db.delete(saved)
-
-
 @router.get("/listings", response_model=list[SavedListingResponse])
 async def get_saved_listings(
     current_user: User = Depends(get_current_user),
@@ -159,6 +114,51 @@ async def compare_listings(
         ))
 
     return items
+
+
+@router.post("/listings/{listing_id}", response_model=SavedListingResponse, status_code=201)
+async def save_listing(
+    listing_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Save a listing. Idempotent — re-saving returns existing."""
+    existing = await db.execute(
+        select(SavedListing).where(
+            and_(SavedListing.user_id == current_user.id, SavedListing.listing_id == listing_id)
+        )
+    )
+    if found := existing.scalar_one_or_none():
+        return found
+
+    # Verify listing exists
+    listing_check = await db.execute(select(Listing.id).where(Listing.id == listing_id))
+    if not listing_check.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    saved = SavedListing(user_id=current_user.id, listing_id=listing_id)
+    db.add(saved)
+    await db.flush()
+    await db.refresh(saved)
+    return saved
+
+
+@router.delete("/listings/{listing_id}", status_code=204)
+async def unsave_listing(
+    listing_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Unsave a listing."""
+    result = await db.execute(
+        select(SavedListing).where(
+            and_(SavedListing.user_id == current_user.id, SavedListing.listing_id == listing_id)
+        )
+    )
+    saved = result.scalar_one_or_none()
+    if not saved:
+        raise HTTPException(status_code=404, detail="Saved listing not found")
+    await db.delete(saved)
 
 
 # ─── UH-205: Saved Searches ──────────────────────────────────────────────────
