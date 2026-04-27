@@ -150,9 +150,9 @@ interface Props {
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function ListingsMap({ listings, onPress }: Props) {
-  // Auto-center on the average listing location, fallback to Jersey City
+  // Auto-center on the average listing location, fallback to a neutral US center
   const center = React.useMemo<[number, number]>(() => {
-    if (listings.length === 0) return [40.7178, -74.0431];
+    if (listings.length === 0) return [39.8283, -98.5795];
     const lat = listings.reduce((s, l) => s + l.latitude, 0) / listings.length;
     const lng = listings.reduce((s, l) => s + l.longitude, 0) / listings.length;
     return [lat, lng];

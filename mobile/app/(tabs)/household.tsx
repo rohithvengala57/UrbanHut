@@ -41,7 +41,7 @@ export default function HouseholdScreen() {
   const [maxMembers, setMaxMembers] = useState("6");
   const [inviteCode, setInviteCode] = useState("");
 
-  const { data: household, isLoading: loadingHousehold } = useHousehold();
+  const { data: household, isLoading: loadingHousehold, isError: householdError, refetch: refetchHousehold } = useHousehold();
   const hasHousehold = !!household;
   const isAdmin = !!(household && currentUser && household.admin_id === currentUser.id);
   const { data: members } = useHouseholdMembers(hasHousehold);
@@ -103,6 +103,27 @@ export default function HouseholdScreen() {
     return (
       <View className="flex-1 items-center justify-center bg-slate-50">
         <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (householdError) {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-50 px-8">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load household</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={() => refetchHousehold()}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }

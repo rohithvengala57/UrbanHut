@@ -86,7 +86,13 @@ export default function MatchesScreen() {
     performMutation();
   };
 
-  const { data: allReceivedInterests, isLoading: inboxLoading, isRefetching: inboxRefetching, refetch: refetchInbox } = useReceivedInterests("all");
+  const {
+    data: allReceivedInterests,
+    isLoading: inboxLoading,
+    isError: inboxError,
+    isRefetching: inboxRefetching,
+    refetch: refetchInbox,
+  } = useReceivedInterests("all");
 
   const filteredInterests = useMemo(() => {
     if (!allReceivedInterests) return [];
@@ -102,7 +108,13 @@ export default function MatchesScreen() {
     return counts;
   }, [allReceivedInterests]);
 
-  const { data: connections, isLoading: connectionsLoading, isRefetching: connectionsRefetching, refetch: refetchConnections } = useQuery({
+  const {
+    data: connections,
+    isLoading: connectionsLoading,
+    isError: connectionsError,
+    isRefetching: connectionsRefetching,
+    refetch: refetchConnections,
+  } = useQuery({
     queryKey: ["connections"],
     queryFn: async () => {
       const response = await api.get("/matching/connections");
@@ -181,6 +193,7 @@ export default function MatchesScreen() {
           interests={filteredInterests}
           counts={inboxCounts}
           isLoading={inboxLoading}
+          isError={inboxError}
           isRefreshing={inboxRefetching}
           onRefresh={refetchInbox}
           filter={inboxFilter}
@@ -192,6 +205,7 @@ export default function MatchesScreen() {
         <ConnectionsTab
           connections={connections}
           isLoading={connectionsLoading}
+          isError={connectionsError}
           isRefreshing={connectionsRefetching}
           onRefresh={refetchConnections}
           onChat={handleChat}
@@ -392,6 +406,7 @@ function InboxTab({
   interests,
   counts,
   isLoading,
+  isError,
   isRefreshing,
   onRefresh,
   filter,
@@ -400,6 +415,7 @@ function InboxTab({
   interests: InterestDetail[] | undefined;
   counts: Record<string, number>;
   isLoading: boolean;
+  isError: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
   filter: InboxFilter;
@@ -445,6 +461,23 @@ function InboxTab({
       {isLoading && !isRefreshing ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color="#0ea5e9" />
+        </View>
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+            <Feather name="wifi-off" size={28} color="#ef4444" />
+          </View>
+          <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load inbox</Text>
+          <Text className="text-slate-400 text-sm text-center mt-2">
+            Pull to refresh or retry.
+          </Text>
+          <TouchableOpacity
+            onPress={onRefresh}
+            className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+          >
+            <Feather name="refresh-cw" size={16} color="#fff" />
+            <Text className="text-white font-semibold">Retry</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -527,6 +560,7 @@ function InboxCard({ interest }: { interest: InterestDetail }) {
 function ConnectionsTab({
   connections,
   isLoading,
+  isError,
   isRefreshing,
   onRefresh,
   onChat,
@@ -534,6 +568,7 @@ function ConnectionsTab({
 }: {
   connections: InterestDetail[] | undefined;
   isLoading: boolean;
+  isError: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
   onChat: (interestId: string) => void;
@@ -543,6 +578,27 @@ function ConnectionsTab({
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View className="flex-1 items-center justify-center px-8">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load connections</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={onRefresh}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }

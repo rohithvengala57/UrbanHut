@@ -19,7 +19,7 @@ export default function ServiceDetailScreen() {
   const queryClient = useQueryClient();
   const [pendingRating, setPendingRating] = useState(0);
 
-  const { data: provider, isLoading } = useQuery({
+  const { data: provider, isLoading, isError, refetch } = useQuery({
     queryKey: ["service-provider", id],
     queryFn: async () => {
       const res = await api.get(`/services/providers/${id}`);
@@ -49,10 +49,45 @@ export default function ServiceDetailScreen() {
     submitReview.mutate(pendingRating);
   };
 
-  if (isLoading || !provider) {
+  if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View className="flex-1 items-center justify-center px-8">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load provider details</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={() => refetch()}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!provider) {
+    return (
+      <View className="flex-1 items-center justify-center px-8">
+        <View className="w-16 h-16 bg-slate-100 rounded-full items-center justify-center mb-4">
+          <Feather name="alert-circle" size={28} color="#94a3b8" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Provider not found</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          This provider may have been removed.
+        </Text>
       </View>
     );
   }
