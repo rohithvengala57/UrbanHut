@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -47,9 +48,24 @@ export function ExpensesTab({ members }: Props) {
   const [exactSplits, setExactSplits] = useState<Record<string, string>>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  const { data: expenses } = useExpenses(1, true);
-  const { data: balances } = useBalances(true);
-  const { data: mySplits } = useMyPendingSplits(true);
+  const {
+    data: expenses,
+    isLoading: expensesLoading,
+    isError: expensesError,
+    refetch: refetchExpenses,
+  } = useExpenses(1, true);
+  const {
+    data: balances,
+    isLoading: balancesLoading,
+    isError: balancesError,
+    refetch: refetchBalances,
+  } = useBalances(true);
+  const {
+    data: mySplits,
+    isLoading: splitsLoading,
+    isError: splitsError,
+    refetch: refetchSplits,
+  } = useMyPendingSplits(true);
   const addExpense = useAddExpense();
   const settleSplit = useSettleSplit();
 
@@ -152,6 +168,41 @@ export function ExpensesTab({ members }: Props) {
 
   const netBalance = myBalance?.net_balance ?? 0;
   const isPositive = netBalance >= 0;
+  const loadingState = expensesLoading || balancesLoading || splitsLoading;
+  const hasDataError = expensesError || balancesError || splitsError;
+
+  if (loadingState) {
+    return (
+      <View className="flex-1 items-center justify-center py-10">
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (hasDataError) {
+    return (
+      <View className="flex-1 items-center justify-center px-8 py-10">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load expense data</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            refetchExpenses();
+            refetchBalances();
+            refetchSplits();
+          }}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1">

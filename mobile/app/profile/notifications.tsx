@@ -21,6 +21,8 @@ const SETTINGS: NotifSetting[] = [
 ];
 
 export default function NotificationsScreen() {
+  // TODO(URB-29): Replace local-only preferences with backend-backed user notification settings
+  // once the API endpoint is available.
   const [prefs, setPrefs] = useState<Record<string, boolean>>(
     Object.fromEntries(SETTINGS.map((s) => [s.key, true]))
   );
@@ -36,8 +38,8 @@ export default function NotificationsScreen() {
           <View className="flex-1">
             <Text className="text-sm font-semibold text-amber-700 mb-0.5">Coming soon</Text>
             <Text className="text-sm text-slate-500">
-              Push notification delivery is not yet available. Your preferences are saved
-              on this device and will sync to the server when this feature launches.
+              Push notification delivery is not yet available. These toggles are preview-only
+              until server-side notification preferences are released.
             </Text>
           </View>
         </View>
