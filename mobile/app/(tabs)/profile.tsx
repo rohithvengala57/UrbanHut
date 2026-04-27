@@ -1,6 +1,8 @@
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { router } from "expo-router";
-import React from "react";
+import React, { useCallback } from "react";
 import { Alert, Platform, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
@@ -19,11 +21,30 @@ const PILLAR_COLORS: Record<string, string> = {
   Community: "#ec4899",
 };
 
+const PILLAR_HINTS: Record<string, string> = {
+  Verification: "Verify phone +5 pts · Verify ID +10 pts",
+  Financial: "Connect bank account +15 pts · Pay rent on time +5 pts",
+  Household: "Complete chores +3 pts · Pay expenses on time +4 pts",
+  Tenure: "Stay 3+ months +5 pts · Stay 12+ months +10 pts",
+  Community: "Post in community +2 pts · Get endorsements +3 pts",
+};
+
 export default function ProfileScreen() {
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { data: trustData } = useTrustScore();
-  const { data: trustEvents } = useTrustEvents();
+  const { data: trustData, refetch: refetchTrust } = useTrustScore();
+  const { data: trustEvents, refetch: refetchEvents } = useTrustEvents();
+
+  // Refetch trust and user data every time the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refetchTrust();
+      refetchEvents();
+      queryClient.invalidateQueries({ queryKey: ["trust-score"] });
+      queryClient.invalidateQueries({ queryKey: ["trust-events"] });
+    }, [refetchTrust, refetchEvents, queryClient]),
+  );
 
   const handleLogout = () => {
     const doLogout = async () => {
@@ -62,10 +83,7 @@ export default function ProfileScreen() {
   ];
 
   return (
-    <ScrollView
-      className="flex-1 bg-slate-50"
-      contentContainerStyle={{ paddingBottom: 48 }}
-    >
+    <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ paddingBottom: 48 }}>
       {/* ── Hero header card ── */}
       <View className="overflow-hidden" style={{ height: 220 }}>
         <Svg
@@ -87,16 +105,16 @@ export default function ProfileScreen() {
           <Text className="text-white text-2xl font-bold mt-3">{user.full_name}</Text>
           <Text className="text-white/75 text-sm">{user.email}</Text>
           <View className="flex-row items-center gap-3 mt-2">
-            {user.occupation && (
+            {!!user.occupation && (
               <View className="bg-white/20 rounded-full px-3 py-1">
                 <Text className="text-white text-xs font-medium">{user.occupation}</Text>
               </View>
             )}
-            {user.current_city && (
+            {!!user.current_city && (
               <View className="flex-row items-center gap-1 bg-white/20 rounded-full px-3 py-1">
                 <Feather name="map-pin" size={11} color="rgba(255,255,255,0.9)" />
                 <Text className="text-white text-xs">
-                  {user.current_city}, {user.current_state}
+                  {user.current_city}{user.current_state ? `, ${user.current_state}` : ""}
                 </Text>
               </View>
             )}
@@ -143,6 +161,8 @@ export default function ProfileScreen() {
               {trustPillars.map((pillar) => {
                 const color = PILLAR_COLORS[pillar.label] ?? "#64748b";
                 const pct = Math.min((pillar.score / pillar.max) * 100, 100);
+                const hint = PILLAR_HINTS[pillar.label];
+                const isMaxed = pct >= 100;
                 return (
                   <View key={pillar.label}>
                     <View className="flex-row justify-between mb-1">
@@ -152,11 +172,11 @@ export default function ProfileScreen() {
                       </Text>
                     </View>
                     <View className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                      <View
-                        className="h-full rounded-full"
-                        style={{ width: `${pct}%`, backgroundColor: color }}
-                      />
+                      <View className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
                     </View>
+                    {!isMaxed && hint && (
+                      <Text className="text-xs text-slate-400 mt-1">{hint}</Text>
+                    )}
                   </View>
                 );
               })}
@@ -169,18 +189,14 @@ export default function ProfileScreen() {
           <Text className="font-bold text-slate-900 text-lg mb-3">Trust Activity</Text>
           {!trustEvents || trustEvents.length === 0 ? (
             <Text className="text-slate-400 text-sm">
-              Your trust timeline will appear here as you complete verifications and household
-              activity.
+              Your trust timeline will appear here as you complete verifications and household activity.
             </Text>
           ) : (
             trustEvents.slice(0, 5).map((event: any, index: number) => (
               <View
                 key={event.id}
-                className={`py-3 flex-row items-start gap-3 ${
-                  index > 0 ? "border-t border-slate-100" : ""
-                }`}
+                className={`py-3 flex-row items-start gap-3 ${index > 0 ? "border-t border-slate-100" : ""}`}
               >
-                {/* Timeline dot */}
                 <View
                   className={`w-8 h-8 rounded-full items-center justify-center mt-0.5 ${
                     event.points_delta >= 0 ? "bg-green-50" : "bg-red-50"
@@ -257,9 +273,7 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={item.label}
               onPress={() => router.push(item.route as any)}
-              className={`flex-row items-center justify-between py-3.5 ${
-                idx > 0 ? "border-t border-slate-100" : ""
-              }`}
+              className={`flex-row items-center justify-between py-3.5 ${idx > 0 ? "border-t border-slate-100" : ""}`}
               activeOpacity={0.7}
             >
               <View className="flex-row items-center gap-3">
@@ -287,9 +301,7 @@ export default function ProfileScreen() {
             <TouchableOpacity
               key={item.label}
               onPress={() => router.push(item.route as any)}
-              className={`flex-row items-center justify-between py-3.5 ${
-                idx > 0 ? "border-t border-slate-100" : ""
-              }`}
+              className={`flex-row items-center justify-between py-3.5 ${idx > 0 ? "border-t border-slate-100" : ""}`}
               activeOpacity={0.7}
             >
               <View className="flex-row items-center gap-3">

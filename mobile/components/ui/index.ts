@@ -4,6 +4,7 @@ export { Badge } from "./Badge";
 export { Button } from "./Button";
 export { Card } from "./Card";
 export { ElevatedCard } from "./ElevatedCard";
+export { EmptyState } from "./EmptyState";
 export { GradientCard } from "./GradientCard";
 export { Input } from "./Input";
 export { PillTag } from "./PillTag";

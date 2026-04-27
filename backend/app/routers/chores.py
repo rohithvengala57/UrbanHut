@@ -2,6 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -271,7 +272,15 @@ async def generate_schedule(
         scheduler = ChoreScheduler()
         result = scheduler.generate_schedule(members, chores, constraints, data.week_start)
     except ScheduleImpossibleError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "error": "constraint_conflict",
+                "message": str(exc),
+                "conflicting_constraints": exc.conflicting_constraints,
+                "suggestion": "Relax these constraints and retry",
+            },
+        )
 
     assignments = []
     for (day, chore_id), member_id in result.assignments.items():

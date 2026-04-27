@@ -267,23 +267,33 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     errors = exc.errors()
-    first = errors[0] if errors else {}
-    field = ".".join(str(x) for x in first.get("loc", [])) if first else None
-    message = first.get("msg", "Validation error") if first else "Validation error"
 
+    # Build field-mapped detail array for all errors (frontend surfaces these directly)
+    detail = []
+    for e in errors:
+        loc = e.get("loc", [])
+        # Strip leading "body" segment that Pydantic adds for request body fields
+        field_parts = [str(x) for x in loc if x != "body"]
+        detail.append({"field": ".".join(field_parts) if field_parts else None, "message": e.get("msg", "")})
+
+    first = detail[0] if detail else {}
     log.warning(
         "request_validation_failed",
         path=request.url.path,
         method=request.method,
-        field=field,
-        message=message,
         error_count=len(errors),
-        errors=[
-            {"loc": ".".join(str(x) for x in e.get("loc", [])), "msg": e.get("msg")}
-            for e in errors[:5]  # cap to avoid huge log entries
-        ],
+        errors=detail[:5],
     )
-    return _error_response("VALIDATION_ERROR", message, field=field, status_code=422)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": first.get("message", "Validation error"),
+                "detail": detail,
+            }
+        },
+    )
 
 
 @app.exception_handler(Exception)

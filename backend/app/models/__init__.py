@@ -1,4 +1,5 @@
 from app.models.appointment import Appointment
+from app.models.inquiry import ListingInquiry
 from app.models.chat import ChatMessage, ChatRoom
 from app.models.chore import ChoreAssignment, ChoreConstraint, ChoreTemplate
 from app.models.community import CommunityPost, CommunityReply, PostUpvote
@@ -18,6 +19,7 @@ from app.models.verification import Verification
 
 __all__ = [
     "User",
+    "ListingInquiry",
     "UserProfile",
     "UserSearchPreferences",
     "Verification",

@@ -33,7 +33,7 @@ import {
 import { DAY_NAMES } from "@/lib/format";
 import { useAuthStore } from "@/stores/authStore";
 
-type ChoreSubTab = "mine" | "all" | "history" | "manage";
+type ChoreSubTab = "mine" | "all" | "manage";
 
 const CONSTRAINT_TYPES = [
   { key: "fixed_assignment", label: "Fixed (must do)" },
@@ -288,8 +288,7 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
 
   const subTabs: { key: ChoreSubTab; label: string }[] = [
     { key: "mine", label: "My Tasks" },
-    { key: "all", label: "All" },
-    { key: "history", label: "History" },
+    { key: "all", label: "Schedule" },
     { key: "manage", label: "Manage" },
   ];
 
@@ -300,7 +299,9 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
   const allPendingAssignments = (schedule || []).filter((a) => a.status === "pending");
   const completedAssignments = (schedule || []).filter((a) => a.status === "completed");
   const missedAssignments = (schedule || []).filter((a) => a.status === "missed");
-  const historyAssignments = [...completedAssignments, ...missedAssignments];
+  const historyAssignments = [...completedAssignments, ...missedAssignments].sort((a, b) => 
+    new Date(b.week_start).getTime() - new Date(a.week_start).getTime()
+  );
 
   return (
     <View className="flex-1">
@@ -389,7 +390,7 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
         </View>
       )}
 
-      {/* ── ALL ───────────────────────────────────────────── */}
+      {/* ── ALL (Schedule) ───────────────────────────────────────────── */}
       {activeSubTab === "all" && (
         <View>
           {isAdmin && (
@@ -403,10 +404,10 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
             </TouchableOpacity>
           )}
 
-          {allPendingAssignments.length === 0 ? (
+          {allPendingAssignments.length === 0 && historyAssignments.length === 0 ? (
             <View className="items-center py-12">
               <Feather name="calendar" size={40} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-3">No schedule for this week</Text>
+              <Text className="text-slate-400 mt-3">No chores scheduled</Text>
               <Text className="text-slate-400 text-sm text-center mt-1">
                 {isAdmin
                   ? "Generate a schedule to assign chores"
@@ -414,142 +415,135 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
               </Text>
             </View>
           ) : (
-            DAY_NAMES.map((dayName, dayIdx) => {
-              const dayAssignments = allPendingAssignments.filter(
-                (a) => a.day_of_week === dayIdx
-              );
-              if (dayAssignments.length === 0) return null;
-              return (
-                <Card key={dayIdx} className="mb-3">
-                  <Text className="font-bold text-slate-900 mb-2">{dayName}</Text>
-                  {dayAssignments.map((a) => {
+            <>
+              {allPendingAssignments.length > 0 && (
+                <Text className="text-slate-500 text-xs font-bold uppercase mb-3 px-1">This Week</Text>
+              )}
+              {DAY_NAMES.map((dayName, dayIdx) => {
+                const dayAssignments = allPendingAssignments.filter(
+                  (a) => a.day_of_week === dayIdx
+                );
+                if (dayAssignments.length === 0) return null;
+                return (
+                  <Card key={dayIdx} className="mb-3">
+                    <Text className="font-bold text-slate-900 mb-2">{dayName}</Text>
+                    {dayAssignments.map((a) => {
+                      const choreName = templateMap.get(a.chore_id)?.name || "Unknown";
+                      const assigneeName = memberMap.get(a.assigned_to) || "Unknown";
+                      const isMe = a.assigned_to === user?.id;
+                      const canComplete = isMe || isAdmin;
+
+                      return (
+                        <View
+                          key={a.id}
+                          className={`flex-row justify-between items-center py-2.5 border-b border-slate-50 last:border-b-0 ${
+                            isMe ? "bg-primary-50 -mx-3 px-3 rounded-xl" : ""
+                          }`}
+                        >
+                          <View className="flex-1">
+                            <Text className="text-slate-800 font-semibold text-sm">
+                              {choreName}
+                            </Text>
+                            <Text
+                              className={`text-xs mt-0.5 ${
+                                isMe ? "text-primary-600 font-medium" : "text-slate-400"
+                              }`}
+                            >
+                              {isMe ? "You" : assigneeName}
+                              {` · ${templateMap.get(a.chore_id)?.weight ?? 1} pt`}
+                            </Text>
+                          </View>
+                          <View className="flex-row items-center gap-2">
+                            {isAdmin && !isMe && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setShowOverrideModal(a.id);
+                                  setOverrideUserId("");
+                                }}
+                                className="bg-slate-100 rounded-lg p-1.5"
+                              >
+                                <Feather name="shuffle" size={13} color="#64748b" />
+                              </TouchableOpacity>
+                            )}
+                            {canComplete && (
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setShowCompleteModal(a.id);
+                                  setCompleteNote("");
+                                }}
+                                className="bg-primary-500 rounded-xl px-3 py-1.5"
+                                activeOpacity={0.85}
+                              >
+                                <Text className="text-white text-xs font-bold">Done ✓</Text>
+                              </TouchableOpacity>
+                            )}
+                            {!canComplete && (
+                              <View className="bg-amber-50 rounded-xl px-2.5 py-1.5">
+                                <Text className="text-amber-600 text-xs font-medium">Pending</Text>
+                              </View>
+                            )}
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </Card>
+                );
+              })}
+
+              {historyAssignments.length > 0 && (
+                <View className="mt-4">
+                  <Text className="text-slate-500 text-xs font-bold uppercase mb-3 px-1">Recent History</Text>
+                  {historyAssignments.slice(0, 10).map((a) => {
                     const choreName = templateMap.get(a.chore_id)?.name || "Unknown";
                     const assigneeName = memberMap.get(a.assigned_to) || "Unknown";
                     const isMe = a.assigned_to === user?.id;
-                    const canComplete = isMe || isAdmin;
-
+                    const isDone = a.status === "completed";
+                    const dayName = DAY_NAMES[a.day_of_week] || "";
                     return (
-                      <View
-                        key={a.id}
-                        className={`flex-row justify-between items-center py-2.5 border-b border-slate-50 last:border-b-0 ${
-                          isMe ? "bg-primary-50 -mx-3 px-3 rounded-xl" : ""
-                        }`}
-                      >
-                        <View className="flex-1">
-                          <Text className="text-slate-800 font-semibold text-sm">
-                            {choreName}
-                          </Text>
-                          <Text
-                            className={`text-xs mt-0.5 ${
-                              isMe ? "text-primary-600 font-medium" : "text-slate-400"
+                      <Card key={a.id} className="mb-2 opacity-80">
+                        <View className="flex-row items-center justify-between">
+                          <View className="flex-row items-center gap-3 flex-1">
+                            <View
+                              className={`w-9 h-9 rounded-xl items-center justify-center ${
+                                isDone ? "bg-green-50" : "bg-red-50"
+                              }`}
+                            >
+                              <Feather
+                                name={isDone ? "check-circle" : "alert-circle"}
+                                size={18}
+                                color={isDone ? "#22c55e" : "#ef4444"}
+                              />
+                            </View>
+                            <View className="flex-1">
+                              <Text className="font-semibold text-slate-800 text-sm">{choreName}</Text>
+                              <View className="flex-row items-center gap-2 mt-0.5">
+                                <Text className="text-[10px] text-slate-400">{dayName}</Text>
+                                <Text className="text-[10px] text-slate-400">
+                                  {isMe ? "You" : assigneeName}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                          <View
+                            className={`rounded-full px-2 py-0.5 ${
+                              isDone ? "bg-green-50" : "bg-red-50"
                             }`}
                           >
-                            {isMe ? "You" : assigneeName}
-                            {` · ${templateMap.get(a.chore_id)?.weight ?? 1} pt`}
-                          </Text>
-                        </View>
-                        <View className="flex-row items-center gap-2">
-                          {isAdmin && !isMe && (
-                            <TouchableOpacity
-                              onPress={() => {
-                                setShowOverrideModal(a.id);
-                                setOverrideUserId("");
-                              }}
-                              className="bg-slate-100 rounded-lg p-1.5"
+                            <Text
+                              className={`text-[10px] font-bold ${
+                                isDone ? "text-green-600" : "text-red-500"
+                              }`}
                             >
-                              <Feather name="shuffle" size={13} color="#64748b" />
-                            </TouchableOpacity>
-                          )}
-                          {canComplete && (
-                            <TouchableOpacity
-                              onPress={() => {
-                                setShowCompleteModal(a.id);
-                                setCompleteNote("");
-                              }}
-                              className="bg-primary-500 rounded-xl px-3 py-1.5"
-                              activeOpacity={0.85}
-                            >
-                              <Text className="text-white text-xs font-bold">Done ✓</Text>
-                            </TouchableOpacity>
-                          )}
-                          {!canComplete && (
-                            <View className="bg-amber-50 rounded-xl px-2.5 py-1.5">
-                              <Text className="text-amber-600 text-xs font-medium">Pending</Text>
-                            </View>
-                          )}
+                              {isDone ? "Done" : "Missed"}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
+                      </Card>
                     );
                   })}
-                </Card>
-              );
-            })
-          )}
-        </View>
-      )}
-
-      {/* ── HISTORY ───────────────────────────────────────── */}
-      {activeSubTab === "history" && (
-        <View>
-          {historyAssignments.length === 0 ? (
-            <View className="items-center py-12">
-              <Feather name="clock" size={40} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-3">No completed chores yet</Text>
-            </View>
-          ) : (
-            historyAssignments.map((a) => {
-              const choreName = templateMap.get(a.chore_id)?.name || "Unknown";
-              const assigneeName = memberMap.get(a.assigned_to) || "Unknown";
-              const isMe = a.assigned_to === user?.id;
-              const isDone = a.status === "completed";
-              const dayName = DAY_NAMES[a.day_of_week] || "";
-              return (
-                <Card key={a.id} className="mb-2">
-                  <View className="flex-row items-center justify-between">
-                    <View className="flex-row items-center gap-3 flex-1">
-                      <View
-                        className={`w-9 h-9 rounded-xl items-center justify-center ${
-                          isDone ? "bg-green-50" : "bg-red-50"
-                        }`}
-                      >
-                        <Feather
-                          name={isDone ? "check-circle" : "alert-circle"}
-                          size={18}
-                          color={isDone ? "#22c55e" : "#ef4444"}
-                        />
-                      </View>
-                      <View className="flex-1">
-                        <Text className="font-semibold text-slate-800">{choreName}</Text>
-                        <View className="flex-row items-center gap-2 mt-0.5">
-                          <Text className="text-xs text-slate-400">{dayName}</Text>
-                          <Text className="text-xs text-slate-400">
-                            {isMe ? "You" : assigneeName}
-                          </Text>
-                          {a.note && (
-                            <Text className="text-xs text-slate-400 italic" numberOfLines={1}>
-                              "{a.note}"
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    </View>
-                    <View
-                      className={`rounded-full px-2.5 py-1 ${
-                        isDone ? "bg-green-50" : "bg-red-50"
-                      }`}
-                    >
-                      <Text
-                        className={`text-xs font-bold ${
-                          isDone ? "text-green-600" : "text-red-500"
-                        }`}
-                      >
-                        {isDone ? "Done" : "Missed"}
-                      </Text>
-                    </View>
-                  </View>
-                </Card>
-              );
-            })
+                </View>
+              )}
+            </>
           )}
         </View>
       )}
@@ -841,7 +835,7 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
       <Modal
         visible={showCompleteModal !== null}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowCompleteModal(null)}
       >
         <View className="flex-1 justify-center items-center bg-black/40 px-6">
@@ -880,7 +874,7 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
       <Modal
         visible={showOverrideModal !== null}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setShowOverrideModal(null)}
       >
         <View className="flex-1 justify-center items-center bg-black/40 px-6">

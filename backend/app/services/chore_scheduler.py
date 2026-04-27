@@ -25,7 +25,9 @@ MAX_BACKTRACKS = 10_000  # Safety cap to prevent request timeouts
 
 
 class ScheduleImpossibleError(Exception):
-    pass
+    def __init__(self, message: str, conflicting_constraints: list[str] | None = None):
+        super().__init__(message)
+        self.conflicting_constraints = conflicting_constraints or []
 
 
 class ScheduleTimeoutError(Exception):
@@ -137,6 +139,14 @@ class ChoreScheduler:
         )
 
         if not success and not best_so_far:
+            # Identify which active constraint types contributed to the conflict
+            conflicting = []
+            if restrictions:
+                conflicting.append("restriction")
+            if freq_caps:
+                conflicting.append("frequency_cap")
+            if fixed:
+                conflicting.append("fixed_assignment")
             log.error(
                 "chore_schedule_impossible",
                 member_count=len(members),
@@ -145,8 +155,14 @@ class ChoreScheduler:
                 fixed_constraints=len(fixed),
                 restrictions=len(restrictions),
                 backtracks=backtrack_count[0],
+                conflicting_constraints=conflicting,
             )
-            raise ScheduleImpossibleError("Cannot satisfy all constraints")
+            day, chore_id, _ = slots[0]
+            chore_name = chore_map[chore_id].name
+            raise ScheduleImpossibleError(
+                f"Cannot satisfy constraints for '{chore_name}' on {week_start}. Try relaxing some rules.",
+                conflicting_constraints=conflicting,
+            )
 
         final_schedule = schedule if success else best_so_far
         final_partial = not success

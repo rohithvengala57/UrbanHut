@@ -1,8 +1,10 @@
 import { Feather } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useState } from "react";
 import {
   Alert,
   Modal,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -43,6 +45,7 @@ export function ExpensesTab({ members }: Props) {
     split_type: "equal" as "equal" | "exact",
   });
   const [exactSplits, setExactSplits] = useState<Record<string, string>>({});
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   const { data: expenses } = useExpenses(1, true);
   const { data: balances } = useBalances(true);
@@ -97,24 +100,54 @@ export function ExpensesTab({ members }: Props) {
         return;
       }
     }
-    addExpense.mutate(
-      { ...form, amount: amountCents, split_details },
-      {
-        onSuccess: () => {
-          setShowAddModal(false);
-          setForm({
-            description: "",
-            amount: "",
-            category: "groceries",
-            date: new Date().toISOString().split("T")[0],
-            split_type: "equal",
-          });
-          setExactSplits({});
-        },
-        onError: (err: any) =>
-          Alert.alert("Error", err.response?.data?.detail || "Failed to add expense"),
-      }
-    );
+
+    const performAdd = () => {
+      addExpense.mutate(
+        { ...form, amount: amountCents, split_details },
+        {
+          onSuccess: () => {
+            setShowAddModal(false);
+            setForm({
+              description: "",
+              amount: "",
+              category: "groceries",
+              date: new Date().toISOString().split("T")[0],
+              split_type: "equal",
+            });
+            setExactSplits({});
+          },
+          onError: (err: any) =>
+            Alert.alert(
+              "Error",
+              err.response?.data?.detail || "Failed to add expense",
+              [
+                { text: "Cancel", style: "cancel" },
+                { text: "Retry", onPress: performAdd }
+              ]
+            ),
+        }
+      );
+    };
+
+    performAdd();
+  };
+
+  const splitTotal = Object.values(exactSplits).reduce(
+    (sum, val) => sum + (parseFloat(val) || 0),
+    0
+  );
+  const amountNum = parseFloat(form.amount) || 0;
+  const isSplitMismatch =
+    form.split_type === "exact" && Math.abs(splitTotal - amountNum) > 0.01;
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(Platform.OS === "ios");
+    if (selectedDate) {
+      setForm((p) => ({
+        ...p,
+        date: selectedDate.toISOString().split("T")[0],
+      }));
+    }
   };
 
   const netBalance = myBalance?.net_balance ?? 0;
@@ -383,12 +416,21 @@ export function ExpensesTab({ members }: Props) {
                 </View>
                 <View className="flex-1">
                   <Text className="text-sm font-medium text-slate-700 mb-1">Date</Text>
-                  <TextInput
-                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900"
-                    placeholder="YYYY-MM-DD"
-                    value={form.date}
-                    onChangeText={(v) => setForm((p) => ({ ...p, date: v }))}
-                  />
+                  <TouchableOpacity
+                    onPress={() => setShowDatePicker(true)}
+                    className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex-row items-center justify-between"
+                  >
+                    <Text className="text-slate-900">{form.date}</Text>
+                    <Feather name="calendar" size={16} color="#64748b" />
+                  </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={new Date(form.date)}
+                      mode="date"
+                      display="default"
+                      onChange={onDateChange}
+                    />
+                  )}
                 </View>
               </View>
 
@@ -444,9 +486,25 @@ export function ExpensesTab({ members }: Props) {
 
               {form.split_type === "exact" && members.length > 0 && (
                 <View className="mb-3 bg-slate-50 rounded-xl p-3">
-                  <Text className="text-xs font-medium text-slate-500 mb-2">
-                    Enter each person's share ($)
-                  </Text>
+                  <View className="flex-row justify-between items-center mb-2">
+                    <Text className="text-xs font-medium text-slate-500">
+                      Enter each person's share ($)
+                    </Text>
+                    <Text
+                      className={`text-xs font-bold ${
+                        isSplitMismatch ? "text-red-500" : "text-green-600"
+                      }`}
+                    >
+                      Total: ${splitTotal.toFixed(2)} / ${amountNum.toFixed(2)}
+                    </Text>
+                  </View>
+                  {isSplitMismatch && (
+                    <View className="bg-red-50 rounded-lg px-2 py-1 mb-2">
+                      <Text className="text-red-600 text-[10px]">
+                        Mismatch: ${Math.abs(splitTotal - amountNum).toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
                   {members.map((m) => (
                     <View key={m.id} className="flex-row items-center justify-between mb-2">
                       <Text className="text-slate-700 flex-1">{m.full_name}</Text>

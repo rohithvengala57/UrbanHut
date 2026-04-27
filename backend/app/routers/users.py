@@ -4,13 +4,15 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image, ImageOps
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
+from app.models.match import MatchInterest
 from app.models.user import User
+from app.models.user_search_preferences import UserSearchPreferences
 from app.schemas.user import UserProfileUpdate, UserPublicResponse, UserResponse
 from app.utils.s3 import avatar_key, upload_bytes
 
@@ -100,6 +102,28 @@ async def upload_avatar(
     db.add(current_user)
     await db.flush()
     return {"avatar_key": key}
+
+
+@router.get("/seeking-count")
+async def seeking_count(db: AsyncSession = Depends(get_db)):
+    """Count of active seekers — users with search preferences set. Used for home insight cards."""
+    result = await db.execute(
+        select(func.count(UserSearchPreferences.id))
+    )
+    count = result.scalar_one()
+    return {"count": count}
+
+
+@router.get("/{user_id}/best-match-score")
+async def best_match_score(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Return the top compatibility score this user has received from a listing match."""
+    result = await db.execute(
+        select(func.max(MatchInterest.compatibility_score)).where(
+            MatchInterest.from_user_id == user_id
+        )
+    )
+    score = result.scalar_one()
+    return {"user_id": user_id, "best_match_score": float(score) if score is not None else 0.0}
 
 
 @router.get("/{user_id}", response_model=UserPublicResponse)
