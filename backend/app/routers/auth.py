@@ -5,11 +5,13 @@ from datetime import datetime, timedelta, timezone
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.middleware.auth import get_current_user
+from app.models.listing import Listing
+from app.models.otp_code import OtpCode
 from app.models.refresh_token import RefreshToken
 from app.models.user import User
 from app.models.verification import Verification
@@ -26,15 +28,52 @@ from app.utils.security import (
 
 log = structlog.get_logger("app.routers.auth")
 
-# In-memory OTP store for dev (keyed by user_id → code)
-_otp_store: dict[str, str] = {}
-_phone_otp_store: dict[str, dict] = {}
+_EMAIL_OTP_TTL_MINUTES = 15
+_PHONE_OTP_TTL_MINUTES = 10
+_OTP_MAX_ATTEMPTS = 5
+_OTP_LOCK_MINUTES = 15
+_OTP_RESEND_COOLDOWN_SECONDS = 30
 
 
 class VerifyEmailRequest(BaseModel):
     code: str
 
 router = APIRouter()
+
+
+async def _get_active_otp(db: AsyncSession, user_id: uuid.UUID, otp_type: str, phone: str | None = None) -> OtpCode | None:
+    now = datetime.now(timezone.utc)
+    q = (
+        select(OtpCode)
+        .where(
+            OtpCode.user_id == user_id,
+            OtpCode.otp_type == otp_type,
+            OtpCode.used_at.is_(None),
+            OtpCode.expires_at > now,
+        )
+        .order_by(OtpCode.created_at.desc())
+    )
+    if phone is not None:
+        q = q.where(OtpCode.phone == phone)
+    result = await db.execute(q)
+    return result.scalars().first()
+
+
+async def _create_otp(db: AsyncSession, user_id: uuid.UUID, otp_type: str, ttl_minutes: int, phone: str | None = None, resend_count: int = 0) -> OtpCode:
+    now = datetime.now(timezone.utc)
+    code = str(random.randint(100000, 999999))
+    otp = OtpCode(
+        user_id=user_id,
+        otp_type=otp_type,
+        code=code,
+        phone=phone,
+        attempt_count=0,
+        resend_count=resend_count,
+        expires_at=now + timedelta(minutes=ttl_minutes),
+    )
+    db.add(otp)
+    await db.flush()
+    return otp
 
 
 async def _get_or_create_verification(
@@ -335,32 +374,25 @@ async def verify_email(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    user_key = str(current_user.id)
-    stored = _otp_store.get(user_key)
-
+    now = datetime.now(timezone.utc)
     log.info("email_verification_attempt", user_id=str(current_user.id))
 
-    # Accept if code matches stored OTP or if no OTP was generated (dev mode: accept any 6-digit code)
-    if stored and data.code != stored:
-        log.warning(
-            "email_verification_code_mismatch",
-            user_id=str(current_user.id),
-        )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
-    if not stored and len(data.code) != 6:
-        log.warning(
-            "email_verification_invalid_code_format",
-            user_id=str(current_user.id),
-            code_length=len(data.code),
-        )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Enter a 6-digit code")
+    otp = await _get_active_otp(db, current_user.id, "email")
+    if not otp:
+        log.warning("email_verification_no_active_otp", user_id=str(current_user.id))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No active verification code. Request a new one.")
 
-    _otp_store.pop(user_key, None)
+    if otp.code != data.code:
+        otp.attempt_count += 1
+        log.warning("email_verification_code_mismatch", user_id=str(current_user.id), attempts=otp.attempt_count)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid verification code")
+
+    otp.used_at = now
     verification = await _get_or_create_verification(db, current_user.id, "email")
     verification.status = "verified"
-    verification.verified_at = datetime.now(timezone.utc)
-    verification.submitted_at = verification.submitted_at or datetime.now(timezone.utc)
-    verification.reviewed_at = verification.verified_at
+    verification.verified_at = now
+    verification.submitted_at = verification.submitted_at or now
+    verification.reviewed_at = now
     verification.review_notes = "Verified via email OTP"
     await _award_verification_points(
         db,
@@ -378,16 +410,23 @@ async def resend_verification(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    code = str(random.randint(100000, 999999))
-    _otp_store[str(current_user.id)] = code
+    now = datetime.now(timezone.utc)
+
+    existing = await _get_active_otp(db, current_user.id, "email")
+    if existing and (now - existing.created_at.replace(tzinfo=timezone.utc)).total_seconds() < _OTP_RESEND_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Please wait before requesting another code.")
+
+    resend_count = (existing.resend_count if existing else 0) + 1
+    otp = await _create_otp(db, current_user.id, "email", _EMAIL_OTP_TTL_MINUTES, resend_count=resend_count)
+
     verification = await _get_or_create_verification(db, current_user.id, "email")
     if verification.status != "verified":
         verification.status = "pending"
-        verification.submitted_at = datetime.now(timezone.utc)
+        verification.submitted_at = now
 
-    log.info("email_verification_code_resent", user_id=str(current_user.id))
+    log.info("email_verification_code_resent", user_id=str(current_user.id), resend_count=resend_count)
     # In production, send via email. In dev, return in response.
-    return {"message": "Verification code sent", "dev_code": code}
+    return {"message": "Verification code sent", "dev_code": otp.code}
 
 
 @router.post("/phone/request-otp", status_code=status.HTTP_200_OK)
@@ -397,48 +436,25 @@ async def request_phone_otp(
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
-    store_key = str(current_user.id)
-    existing = _phone_otp_store.get(store_key)
 
     log.info(
         "phone_otp_requested",
         user_id=str(current_user.id),
-        # Log only country code prefix, not full number
         phone_prefix=data.phone[:4] if len(data.phone) >= 4 else "short",
     )
 
-    if existing and existing.get("locked_until") and now < existing["locked_until"]:
-        log.warning(
-            "phone_otp_locked",
-            user_id=str(current_user.id),
-            locked_until=existing["locked_until"].isoformat(),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed attempts. Try again later.",
-        )
-    if existing and existing.get("sent_at") and now - existing["sent_at"] < timedelta(seconds=30):
-        log.warning(
-            "phone_otp_too_soon",
-            user_id=str(current_user.id),
-            seconds_since_last=int((now - existing["sent_at"]).total_seconds()),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Please wait before requesting another code.",
-        )
+    existing = await _get_active_otp(db, current_user.id, "phone")
+    if existing:
+        if existing.locked_until and now < existing.locked_until.replace(tzinfo=timezone.utc):
+            log.warning("phone_otp_locked", user_id=str(current_user.id), locked_until=existing.locked_until.isoformat())
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many failed attempts. Try again later.")
+        elapsed = (now - existing.created_at.replace(tzinfo=timezone.utc)).total_seconds()
+        if elapsed < _OTP_RESEND_COOLDOWN_SECONDS:
+            log.warning("phone_otp_too_soon", user_id=str(current_user.id), seconds_since_last=int(elapsed))
+            raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Please wait before requesting another code.")
 
-    code = str(random.randint(100000, 999999))
-    resend_count = (existing or {}).get("resend_count", 0) + 1
-    _phone_otp_store[store_key] = {
-        "code": code,
-        "phone": data.phone,
-        "attempt_count": 0,
-        "resend_count": resend_count,
-        "sent_at": now,
-        "expires_at": now + timedelta(minutes=10),
-        "locked_until": None,
-    }
+    resend_count = (existing.resend_count if existing else 0) + 1
+    otp = await _create_otp(db, current_user.id, "phone", _PHONE_OTP_TTL_MINUTES, phone=data.phone, resend_count=resend_count)
 
     verification = await _get_or_create_verification(db, current_user.id, "phone")
     if verification.status != "verified":
@@ -450,9 +466,9 @@ async def request_phone_otp(
         "phone_otp_sent",
         user_id=str(current_user.id),
         resend_count=resend_count,
-        expires_at=(now + timedelta(minutes=10)).isoformat(),
+        expires_at=otp.expires_at.isoformat(),
     )
-    return {"message": "Phone OTP sent", "dev_code": code}
+    return {"message": "Phone OTP sent", "dev_code": otp.code}
 
 
 @router.post("/phone/verify-otp", status_code=status.HTTP_200_OK)
@@ -462,61 +478,28 @@ async def verify_phone_otp(
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
-    store_key = str(current_user.id)
-    challenge = _phone_otp_store.get(store_key)
 
     log.info("phone_otp_verify_attempt", user_id=str(current_user.id))
 
-    if not challenge or challenge.get("phone") != data.phone:
-        log.warning(
-            "phone_otp_verify_no_challenge",
-            user_id=str(current_user.id),
-            has_challenge=challenge is not None,
-        )
+    otp = await _get_active_otp(db, current_user.id, "phone", phone=data.phone)
+    if not otp:
+        log.warning("phone_otp_verify_no_challenge", user_id=str(current_user.id))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Request a code first")
 
-    if challenge["expires_at"] < now:
-        log.warning(
-            "phone_otp_verify_expired",
-            user_id=str(current_user.id),
-            expired_at=challenge["expires_at"].isoformat(),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OTP expired. Request a new code.",
-        )
+    if otp.locked_until and now < otp.locked_until.replace(tzinfo=timezone.utc):
+        log.warning("phone_otp_verify_locked", user_id=str(current_user.id), locked_until=otp.locked_until.isoformat())
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many failed attempts. Try again later.")
 
-    if challenge.get("locked_until") and now < challenge["locked_until"]:
-        log.warning(
-            "phone_otp_verify_locked",
-            user_id=str(current_user.id),
-            locked_until=challenge["locked_until"].isoformat(),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed attempts. Try again later.",
-        )
-
-    if challenge["code"] != data.code:
-        challenge["attempt_count"] += 1
-        attempts = challenge["attempt_count"]
-        if attempts >= 5:
-            challenge["locked_until"] = now + timedelta(minutes=15)
-            log.warning(
-                "phone_otp_verify_max_attempts_exceeded",
-                user_id=str(current_user.id),
-                attempts=attempts,
-                locked_until=challenge["locked_until"].isoformat(),
-            )
+    if otp.code != data.code:
+        otp.attempt_count += 1
+        if otp.attempt_count >= _OTP_MAX_ATTEMPTS:
+            otp.locked_until = now + timedelta(minutes=_OTP_LOCK_MINUTES)
+            log.warning("phone_otp_verify_max_attempts_exceeded", user_id=str(current_user.id), attempts=otp.attempt_count, locked_until=otp.locked_until.isoformat())
         else:
-            log.warning(
-                "phone_otp_verify_wrong_code",
-                user_id=str(current_user.id),
-                attempt=attempts,
-                remaining=5 - attempts,
-            )
+            log.warning("phone_otp_verify_wrong_code", user_id=str(current_user.id), attempt=otp.attempt_count, remaining=_OTP_MAX_ATTEMPTS - otp.attempt_count)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
 
+    otp.used_at = now
     current_user.phone = data.phone
     verification = await _get_or_create_verification(db, current_user.id, "phone")
     verification.status = "verified"
@@ -531,7 +514,6 @@ async def verify_phone_otp(
         "phone_verified",
         {"phone": data.phone},
     )
-    _phone_otp_store.pop(store_key, None)
     log.info("phone_verification_success", user_id=str(current_user.id))
     return {"message": "Phone verified successfully"}
 
@@ -546,5 +528,14 @@ async def delete_account(
         user_id=str(current_user.id),
         email_domain=current_user.email.split("@")[-1] if current_user.email else "unknown",
     )
+
+    # Explicitly delete owned listings before removing the user so that
+    # any S3-backed image keys and household linkages are cleanly removed.
+    # Other FKs (expenses, chores, matches) cascade via ON DELETE CASCADE at the DB level.
+    listings_result = await db.execute(select(Listing).where(Listing.host_id == current_user.id))
+    for listing in listings_result.scalars().all():
+        await db.delete(listing)
+
+    await db.flush()
     await db.delete(current_user)
     log.info("account_deleted", user_id=str(current_user.id))
