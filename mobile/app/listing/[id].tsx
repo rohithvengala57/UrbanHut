@@ -293,34 +293,34 @@ export default function ListingDetailScreen() {
                 {listing.title}
               </Text>
             </View>
+          </View>
 
-            {/* Top-right actions */}
-            <View style={{ position: "absolute", top: -280, right: 12, flexDirection: "row", gap: 8 }}>
-              {!isHost && (
-                <TouchableOpacity
-                  onPress={handleToggleSave}
-                  style={{
-                    width: 40, height: 40, borderRadius: 20,
-                    backgroundColor: "rgba(255,255,255,0.9)",
-                    alignItems: "center", justifyContent: "center",
-                  }}
-                >
-                  <Feather name="bookmark" size={18} color={isSaved ? "#f59e0b" : "#64748b"} />
-                </TouchableOpacity>
-              )}
-              {listing.is_verified && (
-                <View
-                  style={{
-                    height: 40, borderRadius: 20, backgroundColor: "#0ea5e9",
-                    paddingHorizontal: 12, alignItems: "center", justifyContent: "center",
-                    flexDirection: "row", gap: 4,
-                  }}
-                >
-                  <Feather name="check-circle" size={13} color="#fff" />
-                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Verified</Text>
-                </View>
-              )}
-            </View>
+          {/* Top-right actions — positioned directly inside hero container */}
+          <View style={{ position: "absolute", top: 12, right: 12, flexDirection: "row", gap: 8 }}>
+            {!isHost && (
+              <TouchableOpacity
+                onPress={handleToggleSave}
+                style={{
+                  width: 40, height: 40, borderRadius: 20,
+                  backgroundColor: "rgba(255,255,255,0.9)",
+                  alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <Feather name="bookmark" size={18} color={isSaved ? "#f59e0b" : "#64748b"} />
+              </TouchableOpacity>
+            )}
+            {listing.is_verified && (
+              <View
+                style={{
+                  height: 40, borderRadius: 20, backgroundColor: "#0ea5e9",
+                  paddingHorizontal: 12, alignItems: "center", justifyContent: "center",
+                  flexDirection: "row", gap: 4,
+                }}
+              >
+                <Feather name="check-circle" size={13} color="#fff" />
+                <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Verified</Text>
+              </View>
+            )}
           </View>
         </View>
 

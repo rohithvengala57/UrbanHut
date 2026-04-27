@@ -49,7 +49,7 @@ export default function MatchesScreen() {
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const queryClient = useQueryClient();
 
-  const { data: recommendations, isLoading: recsLoading, isRefetching: recsRefetching, refetch: refetchRecs } = useQuery({
+  const { data: recommendations, isLoading: recsLoading, isError: recsError, isRefetching: recsRefetching, refetch: refetchRecs } = useQuery({
     queryKey: ["recommendations"],
     queryFn: async () => {
       const response = await api.get("/matching/recommendations");
@@ -167,6 +167,7 @@ export default function MatchesScreen() {
         <RecommendationsTab
           recommendations={recommendations}
           isLoading={recsLoading}
+          isError={recsError}
           isRefreshing={recsRefetching}
           onRefresh={refetchRecs}
           myInterests={myInterests}
@@ -205,6 +206,7 @@ export default function MatchesScreen() {
 function RecommendationsTab({
   recommendations,
   isLoading,
+  isError,
   isRefreshing,
   onRefresh,
   myInterests,
@@ -213,6 +215,7 @@ function RecommendationsTab({
 }: {
   recommendations: any[] | undefined;
   isLoading: boolean;
+  isError: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
   myInterests: any[] | undefined;
@@ -223,6 +226,27 @@ function RecommendationsTab({
     return (
       <View className="flex-1 items-center justify-center">
         <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View className="flex-1 items-center justify-center px-8">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load recommendations</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={onRefresh}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }

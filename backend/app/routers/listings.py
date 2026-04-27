@@ -873,7 +873,19 @@ async def upload_listing_image(
 
     try:
         keys = process_and_upload_image(file_bytes, key_prefix)
-    except Exception as exc:
+    except RuntimeError as exc:
+        # S3 not configured
+        log.error(
+            "listing_image_upload_s3_not_configured",
+            user_id=str(current_user.id),
+            listing_id=str(listing_id),
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Image upload is not available: storage is not configured.",
+        )
+    except OSError as exc:
         log.error(
             "listing_image_processing_failed",
             user_id=str(current_user.id),

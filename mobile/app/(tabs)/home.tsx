@@ -13,8 +13,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
-
 import { ListingCard } from "@/components/listing/ListingCard";
 import ListingsMap from "@/components/map/ListingsMap";
 import { useListings } from "@/hooks/useListings";
@@ -42,34 +40,6 @@ const SORT_OPTIONS = [
   { value: "newest", label: "Newest" },
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
-] as const;
-
-/* ---------- Insight card data ---------- */
-const INSIGHT_CARDS = [
-  {
-    key: "match",
-    title: "Best Match Today",
-    subtitle: "92% compatibility",
-    icon: "heart" as const,
-    gradientStart: "#0ea5e9",
-    gradientEnd: "#10b981",
-  },
-  {
-    key: "nearby",
-    title: "Homes Near You",
-    subtitle: "14 new this week",
-    icon: "map-pin" as const,
-    gradientStart: "#8b5cf6",
-    gradientEnd: "#0ea5e9",
-  },
-  {
-    key: "people",
-    title: "People Looking",
-    subtitle: "37 active seekers",
-    icon: "users" as const,
-    gradientStart: "#f59e0b",
-    gradientEnd: "#ef4444",
-  },
 ] as const;
 
 /* ---------- chip label helpers ---------- */
@@ -102,49 +72,6 @@ function chipLabel(key: keyof ListingFilters, value: unknown): string {
   if (key === "min_trust") return `Trust ${value}+`;
   const prefix = FILTER_LABELS[key] ?? key;
   return `${prefix}: ${value}`;
-}
-
-/* ── Insight card component ── */
-function InsightCard({
-  title,
-  subtitle,
-  icon,
-  gradientStart,
-  gradientEnd,
-}: {
-  title: string;
-  subtitle: string;
-  icon: keyof typeof import("@expo/vector-icons").Feather.glyphMap;
-  gradientStart: string;
-  gradientEnd: string;
-}) {
-  return (
-    <View className="rounded-2xl overflow-hidden mr-3" style={{ width: 150, height: 90 }}>
-      <Svg
-        style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
-        width="100%"
-        height="100%"
-        preserveAspectRatio="none"
-      >
-        <Defs>
-          <LinearGradient id={`ig-${icon}`} x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={gradientStart} stopOpacity="1" />
-            <Stop offset="1" stopColor={gradientEnd} stopOpacity="1" />
-          </LinearGradient>
-        </Defs>
-        <Rect width="100%" height="100%" fill={`url(#ig-${icon})`} />
-      </Svg>
-      <View className="flex-1 p-3 justify-between">
-        <View className="w-8 h-8 bg-white/20 rounded-xl items-center justify-center">
-          <Feather name={icon} size={16} color="#fff" />
-        </View>
-        <View>
-          <Text className="text-white font-bold text-sm" numberOfLines={1}>{title}</Text>
-          <Text className="text-white/75 text-xs">{subtitle}</Text>
-        </View>
-      </View>
-    </View>
-  );
 }
 
 /* ── Map error wrapper ── */
@@ -405,18 +332,6 @@ export default function HomeScreen() {
           refreshing={isRefetching}
           ListHeaderComponent={
             <View>
-              {/* Smart insight cards */}
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                className="mb-5"
-                contentContainerStyle={{ paddingRight: 4 }}
-              >
-                {INSIGHT_CARDS.map(({ key, ...cardProps }) => (
-                  <InsightCard key={key} {...cardProps} />
-                ))}
-              </ScrollView>
-
               {!isFilteredEmpty && (
                 <Text className="text-slate-500 text-sm mb-3">
                   {(listings || []).length} listing{(listings || []).length !== 1 ? "s" : ""} found

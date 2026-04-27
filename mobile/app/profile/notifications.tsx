@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ScrollView, Switch, Text, View } from "react-native";
 
@@ -30,10 +31,16 @@ export default function NotificationsScreen() {
   return (
     <ScrollView className="flex-1 bg-slate-50" contentContainerStyle={{ padding: 16 }}>
       <Card className="mb-2">
-        <Text className="text-sm text-slate-500 mb-1">
-          Notification preferences are saved locally. Push notification delivery requires
-          granting permission in your device settings.
-        </Text>
+        <View className="flex-row items-start gap-2">
+          <Feather name="info" size={16} color="#f59e0b" style={{ marginTop: 1 }} />
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-amber-700 mb-0.5">Coming soon</Text>
+            <Text className="text-sm text-slate-500">
+              Push notification delivery is not yet available. Your preferences are saved
+              on this device and will sync to the server when this feature launches.
+            </Text>
+          </View>
+        </View>
       </Card>
 
       <Card>

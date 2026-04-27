@@ -5,6 +5,7 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { useAuth } from "@/hooks/useAuth";
 
 SplashScreen.preventAutoHideAsync();
@@ -52,8 +53,10 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RootLayoutInner />
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <RootLayoutInner />
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
