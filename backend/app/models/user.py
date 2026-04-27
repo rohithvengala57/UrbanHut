@@ -9,7 +9,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -36,6 +36,9 @@ class User(Base):
 
     trust_score: Mapped[float] = mapped_column(Numeric(5, 2), default=15.0)
     trust_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    push_token: Mapped[str | None] = mapped_column(Text)
+    notification_prefs: Mapped[dict | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

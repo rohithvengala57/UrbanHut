@@ -6,6 +6,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,6 +21,7 @@ const queryClient = new QueryClient({
 
 function RootLayoutInner() {
   const { isLoading } = useAuth();
+  usePushNotifications();
 
   useEffect(() => {
     if (!isLoading) {

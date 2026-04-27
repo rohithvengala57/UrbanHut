@@ -29,8 +29,11 @@ from app.schemas.listing import (
 )
 from app.schemas.match import InterestDetailResponse, InterestStatus
 from app.services.matching_engine import MatchingEngine
+from app.services.notification_service import NotificationService
 from app.utils.geocoding import geocode_address
 from app.utils.s3 import listing_image_prefix, process_and_upload_image
+
+_notifier = NotificationService()
 
 router = APIRouter()
 _bearer = HTTPBearer(auto_error=False)
@@ -730,6 +733,27 @@ async def host_decide_interest(
     # Return with applicant details
     user_result = await db.execute(select(User).where(User.id == interest.from_user_id))
     applicant = user_result.scalar_one_or_none()
+
+    # Notify applicant of host decision / mutual match
+    if applicant:
+        if interest.status == "mutual":
+            await _notifier.notify_mutual_match(
+                push_token_a=applicant.push_token,
+                email_a=applicant.email,
+                prefs_a=applicant.notification_prefs,
+                push_token_b=current_user.push_token,
+                email_b=current_user.email,
+                prefs_b=current_user.notification_prefs,
+                listing_title=listing.title,
+            )
+        elif interest.status in ("accepted", "shortlisted"):
+            await _notifier.notify_host_decision(
+                applicant_push_token=applicant.push_token,
+                applicant_email=applicant.email,
+                applicant_prefs=applicant.notification_prefs,
+                decision=interest.status,
+                listing_title=listing.title,
+            )
 
     return InterestDetailResponse(
         id=interest.id,

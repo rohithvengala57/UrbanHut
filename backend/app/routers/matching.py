@@ -18,6 +18,9 @@ from app.schemas.match import (
     InterestUpdate,
 )
 from app.services.matching_engine import MatchingEngine
+from app.services.notification_service import NotificationService
+
+_notifier = NotificationService()
 
 router = APIRouter()
 
@@ -174,6 +177,17 @@ async def express_interest(
     db.add(interest)
     await db.flush()
     await db.refresh(interest)
+
+    # Notify host about new interest (fire-and-forget)
+    if data.to_listing_id and listing and host:
+        await _notifier.notify_new_interest(
+            host_push_token=host.push_token,
+            host_email=host.email,
+            host_prefs=host.notification_prefs,
+            applicant_name=current_user.full_name,
+            listing_title=listing.title,
+        )
+
     return interest
 
 
