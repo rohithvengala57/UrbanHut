@@ -18,6 +18,7 @@ import {
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatRelativeDate } from "@/lib/format";
 import api from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
@@ -87,15 +88,19 @@ interface Post {
 
 function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
   const [replyText, setReplyText] = useState("");
+  const [displayCount, setDisplayCount] = useState(10);
   const queryClient = useQueryClient();
 
-  const { data: replies, isLoading } = useQuery<Reply[]>({
+  const { data: allReplies, isLoading } = useQuery<Reply[]>({
     queryKey: ["community-replies", post.id],
     queryFn: async () => {
       const res = await api.get(`/community/posts/${post.id}/replies`);
       return res.data;
     },
   });
+
+  const replies = (allReplies ?? []).slice(0, displayCount);
+  const hasMore = (allReplies ?? []).length > displayCount;
 
   const createReply = useMutation({
     mutationFn: async (body: string) => {
@@ -136,14 +141,25 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
               </View>
             ) : (
               <FlatList
-                data={replies ?? []}
+                data={replies}
                 keyExtractor={(r) => r.id}
                 contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12 }}
+                keyboardDismissMode="interactive"
                 ListEmptyComponent={
                   <View className="items-center py-10">
                     <Feather name="message-square" size={36} color="#cbd5e1" />
                     <Text className="text-slate-400 mt-3">No replies yet. Be the first!</Text>
                   </View>
+                }
+                ListFooterComponent={
+                  hasMore ? (
+                    <TouchableOpacity 
+                      onPress={() => setDisplayCount(prev => prev + 10)}
+                      className="py-4 items-center"
+                    >
+                      <Text className="text-primary-500 font-semibold">Load more replies</Text>
+                    </TouchableOpacity>
+                  ) : null
                 }
                 renderItem={({ item }) => (
                   <View className="flex-row items-start gap-3 mb-4">
@@ -213,6 +229,8 @@ function ReplyPanel({ post, onClose }: { post: Post; onClose: () => void }) {
 export default function CommunityScreen() {
   const [selectedType, setSelectedType] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState({ type: "tip", title: "", body: "" });
   const [replyPost, setReplyPost] = useState<Post | null>(null);
   const user = useAuthStore((s) => s.user);
@@ -241,6 +259,8 @@ export default function CommunityScreen() {
       queryClient.invalidateQueries({ queryKey: ["community-posts"] });
       setShowCreateModal(false);
       setCreateForm({ type: "tip", title: "", body: "" });
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 2000);
     },
     onError: (err: any) =>
       Alert.alert("Error", err.response?.data?.detail || "Failed to create post"),
@@ -251,7 +271,40 @@ export default function CommunityScreen() {
       const response = await api.post(`/community/posts/${postId}/upvote`);
       return response.data;
     },
-    onSuccess: () => {
+    onMutate: async (postId) => {
+      await queryClient.cancelQueries({ queryKey: ["community-posts"] });
+      const previousPosts = queryClient.getQueryData<Post[]>(["community-posts", user?.current_city, selectedType]);
+
+      if (previousPosts) {
+        queryClient.setQueryData(
+          ["community-posts", user?.current_city, selectedType],
+          previousPosts.map((p) => {
+            if (p.id === postId) {
+              const alreadyUpvoted = p.user_upvoted;
+              return {
+                ...p,
+                user_upvoted: !alreadyUpvoted,
+                upvotes: alreadyUpvoted ? p.upvotes - 1 : p.upvotes + 1,
+              };
+            }
+            return p;
+          })
+        );
+      }
+
+      return { previousPosts };
+    },
+    onError: (err: any, postId, context) => {
+      if (context?.previousPosts) {
+        queryClient.setQueryData(
+          ["community-posts", user?.current_city, selectedType],
+          context.previousPosts
+        );
+      }
+      setErrorToast(err.response?.data?.detail || "Failed to upvote");
+      setTimeout(() => setErrorToast(null), 3000);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["community-posts"] });
     },
   });
@@ -382,13 +435,11 @@ export default function CommunityScreen() {
             );
           }}
           ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Feather name="message-circle" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-4 text-base">No posts yet</Text>
-              <Text className="text-slate-400 text-sm">
-                Be the first to post in your community
-              </Text>
-            </View>
+            <EmptyState
+              icon="message-circle"
+              title="No posts yet"
+              message="Be the first to post in your community"
+            />
           }
         />
       )}
@@ -411,6 +462,26 @@ export default function CommunityScreen() {
 
       {replyPost && (
         <ReplyPanel post={replyPost} onClose={() => setReplyPost(null)} />
+      )}
+
+      {showSuccessToast && (
+        <View 
+          className="absolute bottom-24 left-10 right-10 bg-slate-800 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2"
+          style={{ elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10 }}
+        >
+          <Feather name="check-circle" size={16} color="#10b981" />
+          <Text className="text-white font-bold">Post created!</Text>
+        </View>
+      )}
+
+      {errorToast && (
+        <View 
+          className="absolute bottom-24 left-10 right-10 bg-red-500 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2"
+          style={{ elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10 }}
+        >
+          <Feather name="alert-circle" size={16} color="#fff" />
+          <Text className="text-white font-bold">{errorToast}</Text>
+        </View>
       )}
 
       {/* Create Post Modal */}
@@ -462,15 +533,25 @@ export default function CommunityScreen() {
                 autoCapitalize="sentences"
               />
 
-              <Text className="text-sm font-medium text-slate-700 mb-1">Body *</Text>
+              <View className="flex-row justify-between items-center mb-1">
+                <Text className="text-sm font-medium text-slate-700">Body *</Text>
+                <Text className={`text-xs ${createForm.body.length > 450 ? "text-red-500 font-bold" : "text-slate-400"}`}>
+                  {createForm.body.length}/500
+                </Text>
+              </View>
               <TextInput
                 className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 mb-5 min-h-[120px]"
                 placeholder="Share details..."
                 value={createForm.body}
-                onChangeText={(v) => setCreateForm((p) => ({ ...p, body: v }))}
+                onChangeText={(v) => {
+                  if (v.length <= 500) {
+                    setCreateForm((p) => ({ ...p, body: v }));
+                  }
+                }}
                 multiline
                 textAlignVertical="top"
                 autoCapitalize="sentences"
+                maxLength={500}
               />
 
               <Button

@@ -1,14 +1,15 @@
 import { Feather } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
+  Modal,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -25,15 +26,93 @@ import { formatCurrency } from "@/lib/format";
 import { useAuthStore } from "@/stores/authStore";
 import api from "@/services/api";
 
+/* ── Toast component ── */
+function Toast({ message, visible }: { message: string; visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <View
+      style={{
+        position: "absolute",
+        bottom: 100,
+        left: 20,
+        right: 20,
+        backgroundColor: "#0f172a",
+        borderRadius: 12,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        alignItems: "center",
+        zIndex: 999,
+      }}
+    >
+      <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>{message}</Text>
+    </View>
+  );
+}
+
+/* ── Interest tooltip ── */
+function InterestTooltip({ visible, onDismiss }: { visible: boolean; onDismiss: () => void }) {
+  if (!visible) return null;
+  return (
+    <TouchableOpacity
+      onPress={onDismiss}
+      style={{
+        position: "absolute",
+        bottom: 76,
+        left: 20,
+        right: 20,
+        backgroundColor: "#1e293b",
+        borderRadius: 12,
+        padding: 12,
+        zIndex: 998,
+      }}
+    >
+      <Text style={{ color: "#fff", fontSize: 13, textAlign: "center" }}>
+        You've already expressed interest — the host will be in touch.
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function ListingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width } = useWindowDimensions();
-  const { data: listing, isLoading } = useListing(id);
+  const { data: listing, isLoading, isError } = useListing(id);
   const { data: myInterests } = useMyInterests();
   const expressInterest = useExpressInterest();
   const user = useAuthStore((s) => s.user);
   const { data: savedListings } = useSavedListings();
   const toggleSave = useToggleSave();
+
+  // Carousel state
+  const [carouselIndex, setCarouselIndex] = useState(0);
+
+  // Toast state
+  const [toastMsg, setToastMsg] = useState("");
+  const [toastVisible, setToastVisible] = useState(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Interest tooltip state
+  const [showInterestTooltip, setShowInterestTooltip] = useState(false);
+  const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Ask a Question modal
+  const [questionModalVisible, setQuestionModalVisible] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [sendingQuestion, setSendingQuestion] = useState(false);
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setToastVisible(true);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastVisible(false), 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+    };
+  }, []);
 
   const { data: roommateSummary } = useQuery({
     queryKey: ["roommate-summary", id],
@@ -52,23 +131,44 @@ export default function ListingDetailScreen() {
     toggleSave.mutate(
       { listingId: id, isSaved: !!isSaved },
       {
-        onError: (err: any) =>
-          Alert.alert("Error", err.response?.data?.detail || "Failed to update saved status"),
-      }
+        onSuccess: () => showToast(isSaved ? "Removed from saved" : "Saved ✓"),
+        onError: () => showToast("Failed to update saved status"),
+      },
     );
   };
 
   const handleInterest = () => {
-    if (alreadyInterested) return;
+    if (alreadyInterested) {
+      setShowInterestTooltip(true);
+      if (tooltipTimer.current) clearTimeout(tooltipTimer.current);
+      tooltipTimer.current = setTimeout(() => setShowInterestTooltip(false), 3000);
+      return;
+    }
     expressInterest.mutate(
       { to_listing_id: id },
       {
-        onSuccess: () =>
-          Alert.alert("Interest Sent!", "The host will be notified of your interest."),
-        onError: (err: any) =>
-          Alert.alert("Error", err.response?.data?.detail || "Failed to send interest"),
-      }
+        onSuccess: () => showToast("Interest sent! The host will be notified."),
+        onError: (err: any) => showToast(err.response?.data?.detail || "Failed to send interest"),
+      },
     );
+  };
+
+  const handleSendQuestion = async () => {
+    if (!questionText.trim()) return;
+    setSendingQuestion(true);
+    try {
+      await api.post("/matching/interest", {
+        to_listing_id: id,
+        message: questionText.trim(),
+      });
+      setQuestionModalVisible(false);
+      setQuestionText("");
+      showToast("Question sent to the host!");
+    } catch {
+      showToast("Failed to send. Please try again.");
+    } finally {
+      setSendingQuestion(false);
+    }
   };
 
   if (isLoading) {
@@ -79,10 +179,23 @@ export default function ListingDetailScreen() {
     );
   }
 
-  if (!listing) {
+  if (isError || !listing) {
     return (
-      <View className="flex-1 items-center justify-center">
-        <Text className="text-slate-500">Listing not found</Text>
+      <View className="flex-1 items-center justify-center bg-white px-8">
+        <View className="w-16 h-16 bg-slate-100 rounded-full items-center justify-center mb-4">
+          <Feather name="alert-circle" size={28} color="#94a3b8" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Listing not found</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          This listing may have been removed or is no longer available.
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="mt-6 flex-row items-center gap-2 bg-slate-100 rounded-2xl px-6 py-3"
+        >
+          <Feather name="arrow-left" size={16} color="#475569" />
+          <Text className="text-slate-600 font-semibold">Go Back</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -103,26 +216,52 @@ export default function ListingDetailScreen() {
     listing.parking_available && "Parking available",
   ].filter(Boolean) as string[];
 
+  const imageCount = listing.images?.length ?? 0;
+
   return (
     <View className="flex-1 bg-slate-50">
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
         {/* ── Hero image ── */}
         <View style={{ height: 320 }} className="bg-slate-200">
-          {listing.images && listing.images.length > 0 ? (
-            <FlatList
-              data={listing.images}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(_, i) => String(i)}
-              renderItem={({ item }) => (
-                <Image
-                  source={{ uri: item }}
-                  style={{ width, height: 320 }}
-                  resizeMode="cover"
-                />
+          {imageCount > 0 ? (
+            <>
+              <FlatList
+                data={listing.images}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(_, i) => String(i)}
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+                  setCarouselIndex(idx);
+                }}
+                renderItem={({ item }) => (
+                  <Image
+                    source={{ uri: item }}
+                    style={{ width, height: 320 }}
+                    resizeMode="cover"
+                  />
+                )}
+              />
+              {/* Page indicator */}
+              {imageCount > 1 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: 56,
+                    right: 14,
+                    backgroundColor: "rgba(0,0,0,0.55)",
+                    borderRadius: 12,
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>
+                    {carouselIndex + 1} / {imageCount}
+                  </Text>
+                </View>
               )}
-            />
+            </>
           ) : (
             <View className="flex-1 items-center justify-center bg-slate-100">
               <Feather name="image" size={48} color="#94a3b8" />
@@ -145,8 +284,6 @@ export default function ListingDetailScreen() {
               </Defs>
               <Rect width="100%" height="100%" fill="url(#detailGrad)" />
             </Svg>
-
-            {/* Price overlay on image */}
             <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 16 }}>
               <Text style={{ color: "#fff", fontSize: 30, fontWeight: "800" }}>
                 {formatCurrency(listing.rent_monthly)}
@@ -163,32 +300,20 @@ export default function ListingDetailScreen() {
                 <TouchableOpacity
                   onPress={handleToggleSave}
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
+                    width: 40, height: 40, borderRadius: 20,
                     backgroundColor: "rgba(255,255,255,0.9)",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    alignItems: "center", justifyContent: "center",
                   }}
                 >
-                  <Feather
-                    name="bookmark"
-                    size={18}
-                    color={isSaved ? "#f59e0b" : "#64748b"}
-                  />
+                  <Feather name="bookmark" size={18} color={isSaved ? "#f59e0b" : "#64748b"} />
                 </TouchableOpacity>
               )}
               {listing.is_verified && (
                 <View
                   style={{
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: "#0ea5e9",
-                    paddingHorizontal: 12,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "row",
-                    gap: 4,
+                    height: 40, borderRadius: 20, backgroundColor: "#0ea5e9",
+                    paddingHorizontal: 12, alignItems: "center", justifyContent: "center",
+                    flexDirection: "row", gap: 4,
                   }}
                 >
                   <Feather name="check-circle" size={13} color="#fff" />
@@ -220,9 +345,7 @@ export default function ListingDetailScreen() {
           <View className="flex-row items-center justify-between mb-4">
             <View className="flex-row items-center gap-1.5 flex-1">
               <Feather name="map-pin" size={14} color="#64748b" />
-              <Text className="text-slate-500 text-sm flex-1" numberOfLines={1}>
-                {locationLabel}
-              </Text>
+              <Text className="text-slate-500 text-sm flex-1" numberOfLines={1}>{locationLabel}</Text>
             </View>
             <Badge label={roomTypeLabels[listing.room_type] || listing.room_type} size="md" />
           </View>
@@ -251,13 +374,7 @@ export default function ListingDetailScreen() {
               <View
                 key={stat.label}
                 className="flex-1 bg-white rounded-2xl px-3 py-3 items-center"
-                style={{
-                  shadowColor: "#0f172a",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 6,
-                  elevation: 2,
-                }}
+                style={{ shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 }}
               >
                 <Feather name={stat.icon} size={18} color="#0ea5e9" />
                 <Text className="text-sm font-bold text-slate-900 mt-1">{stat.value}</Text>
@@ -267,18 +384,10 @@ export default function ListingDetailScreen() {
             {listing.security_deposit != null && (
               <View
                 className="flex-1 bg-white rounded-2xl px-3 py-3 items-center"
-                style={{
-                  shadowColor: "#0f172a",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.05,
-                  shadowRadius: 6,
-                  elevation: 2,
-                }}
+                style={{ shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 }}
               >
                 <Feather name="shield" size={18} color="#0ea5e9" />
-                <Text className="text-sm font-bold text-slate-900 mt-1">
-                  {formatCurrency(listing.security_deposit)}
-                </Text>
+                <Text className="text-sm font-bold text-slate-900 mt-1">{formatCurrency(listing.security_deposit)}</Text>
                 <Text className="text-xs text-slate-400">Deposit</Text>
               </View>
             )}
@@ -290,7 +399,7 @@ export default function ListingDetailScreen() {
             <Text className="text-slate-600 leading-6">{listing.description}</Text>
           </Card>
 
-          {/* Roommate Summary with trust */}
+          {/* Roommate Summary */}
           {roommateSummary &&
             (roommateSummary.household_size > 0 || roommateSummary.occupants?.length > 0) && (
               <Card className="mb-4">
@@ -305,58 +414,39 @@ export default function ListingDetailScreen() {
                     </View>
                   )}
                 </View>
-
                 <View className="flex-row gap-3 mb-3">
                   <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
-                    <Text className="text-sm font-bold text-slate-900">
-                      {roommateSummary.household_size}
-                    </Text>
+                    <Text className="text-sm font-bold text-slate-900">{roommateSummary.household_size}</Text>
                     <Text className="text-xs text-slate-500">Current</Text>
                   </View>
                   <View className="bg-slate-50 rounded-xl px-3 py-2.5 flex-1 items-center">
-                    <Text className="text-sm font-bold text-slate-900">
-                      {roommateSummary.available_spots}
-                    </Text>
+                    <Text className="text-sm font-bold text-slate-900">{roommateSummary.available_spots}</Text>
                     <Text className="text-xs text-slate-500">Open Spots</Text>
                   </View>
                 </View>
-
                 {roommateSummary.occupants?.map((occ: any, idx: number) => {
                   const occupantLabel = String(occ.label || String.fromCharCode(65 + idx));
-                  const lifestyleSummary =
-                    occ.lifestyle_tags?.length > 0
-                      ? occ.lifestyle_tags.slice(0, 3).join(" · ")
-                      : null;
+                  const lifestyleSummary = occ.lifestyle_tags?.length > 0 ? occ.lifestyle_tags.slice(0, 3).join(" · ") : null;
                   return (
                     <View
                       key={`${occupantLabel}-${idx}`}
-                      className={`flex-row items-center justify-between py-3 ${
-                        idx > 0 ? "border-t border-slate-100" : ""
-                      }`}
+                      className={`flex-row items-center justify-between py-3 ${idx > 0 ? "border-t border-slate-100" : ""}`}
                     >
                       <View className="flex-row items-center gap-2.5">
                         <View className="w-9 h-9 bg-primary-100 rounded-full items-center justify-center">
                           <Text className="text-xs font-bold text-primary-600">{occupantLabel}</Text>
                         </View>
                         <View>
-                          <Text className="text-sm font-semibold text-slate-800">
-                            Roommate {occupantLabel}
-                          </Text>
-                          {lifestyleSummary && (
-                            <Text className="text-xs text-slate-400">{lifestyleSummary}</Text>
-                          )}
+                          <Text className="text-sm font-semibold text-slate-800">Roommate {occupantLabel}</Text>
+                          {lifestyleSummary && <Text className="text-xs text-slate-400">{lifestyleSummary}</Text>}
                         </View>
                       </View>
                       <View className="items-end gap-1">
                         <View className="bg-primary-50 rounded-full px-2.5 py-0.5">
-                          <Text className="text-xs text-primary-600 font-semibold">
-                            {occ.trust_band}
-                          </Text>
+                          <Text className="text-xs text-primary-600 font-semibold">{occ.trust_band}</Text>
                         </View>
                         {occ.tenure_months && (
-                          <Text className="text-xs text-slate-400">
-                            {occ.tenure_months}mo
-                          </Text>
+                          <Text className="text-xs text-slate-400">{occ.tenure_months}mo</Text>
                         )}
                       </View>
                     </View>
@@ -405,9 +495,7 @@ export default function ListingDetailScreen() {
                 <View>
                   <Text className="font-semibold text-slate-900">{listing.nearest_transit}</Text>
                   {listing.transit_walk_mins && (
-                    <Text className="text-slate-400 text-sm">
-                      {listing.transit_walk_mins} min walk
-                    </Text>
+                    <Text className="text-slate-400 text-sm">{listing.transit_walk_mins} min walk</Text>
                   )}
                 </View>
               </View>
@@ -435,15 +523,16 @@ export default function ListingDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* Toast */}
+      <Toast message={toastMsg} visible={toastVisible} />
+
+      {/* Interest tooltip */}
+      <InterestTooltip visible={showInterestTooltip} onDismiss={() => setShowInterestTooltip(false)} />
+
       {/* Bottom CTA */}
       <View
         className="px-4 py-4 bg-white border-t border-slate-100"
-        style={{
-          shadowColor: "#0f172a",
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 8,
-        }}
+        style={{ shadowColor: "#0f172a", shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.06, shadowRadius: 8 }}
       >
         {isHost ? (
           <Button
@@ -453,16 +542,81 @@ export default function ListingDetailScreen() {
             icon={<Feather name="settings" size={18} color="#fff" />}
           />
         ) : (
-          <Button
-            title={alreadyInterested ? "Interest Sent" : "I'm Interested"}
-            onPress={handleInterest}
-            size="lg"
-            loading={expressInterest.isPending}
-            disabled={alreadyInterested}
-            variant={alreadyInterested ? "outline" : "primary"}
-          />
+          <View className="flex-row gap-3">
+            {!alreadyInterested && (
+              <TouchableOpacity
+                onPress={() => setQuestionModalVisible(true)}
+                className="flex-row items-center gap-1.5 border border-slate-200 rounded-2xl px-4 py-3"
+              >
+                <Feather name="message-circle" size={18} color="#64748b" />
+                <Text className="text-slate-600 font-semibold text-sm">Ask</Text>
+              </TouchableOpacity>
+            )}
+            <View className="flex-1">
+              <Button
+                title={alreadyInterested ? "Interest Sent ✓" : "I'm Interested"}
+                onPress={handleInterest}
+                size="lg"
+                loading={expressInterest.isPending}
+                disabled={alreadyInterested}
+                variant={alreadyInterested ? "outline" : "primary"}
+              />
+            </View>
+          </View>
         )}
       </View>
+
+      {/* Ask a Question Modal */}
+      <Modal
+        visible={questionModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuestionModalVisible(false)}
+      >
+        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.4)" }}>
+          <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <Text style={{ fontSize: 16, fontWeight: "700", color: "#0f172a" }}>Ask the Host a Question</Text>
+              <TouchableOpacity onPress={() => setQuestionModalVisible(false)}>
+                <Feather name="x" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={{
+                backgroundColor: "#f8fafc", borderRadius: 12, borderWidth: 1.5,
+                borderColor: "#e2e8f0", padding: 14, fontSize: 15, color: "#0f172a",
+                minHeight: 100, textAlignVertical: "top", marginBottom: 16,
+              }}
+              placeholder="e.g. Is the room furnished? Are utilities split equally?"
+              placeholderTextColor="#94a3b8"
+              multiline
+              value={questionText}
+              onChangeText={setQuestionText}
+              autoFocus
+            />
+
+            <TouchableOpacity
+              onPress={handleSendQuestion}
+              disabled={sendingQuestion || !questionText.trim()}
+              style={{
+                backgroundColor: !questionText.trim() || sendingQuestion ? "#7dd3fc" : "#0ea5e9",
+                borderRadius: 14, paddingVertical: 14, alignItems: "center",
+                flexDirection: "row", justifyContent: "center", gap: 8,
+              }}
+            >
+              {sendingQuestion ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Feather name="send" size={16} color="#fff" />
+              )}
+              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                {sendingQuestion ? "Sending…" : "Send Question"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

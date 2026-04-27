@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -119,10 +119,7 @@ function InsightCard({
   gradientEnd: string;
 }) {
   return (
-    <View
-      className="rounded-2xl overflow-hidden mr-3"
-      style={{ width: 150, height: 90 }}
-    >
+    <View className="rounded-2xl overflow-hidden mr-3" style={{ width: 150, height: 90 }}>
       <Svg
         style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}
         width="100%"
@@ -142,9 +139,7 @@ function InsightCard({
           <Feather name={icon} size={16} color="#fff" />
         </View>
         <View>
-          <Text className="text-white font-bold text-sm" numberOfLines={1}>
-            {title}
-          </Text>
+          <Text className="text-white font-bold text-sm" numberOfLines={1}>{title}</Text>
           <Text className="text-white/75 text-xs">{subtitle}</Text>
         </View>
       </View>
@@ -152,11 +147,63 @@ function InsightCard({
   );
 }
 
+/* ── Map error wrapper ── */
+function MapWithErrorBoundary({
+  listings,
+  onPress,
+  onSwitchToList,
+}: {
+  listings: any[];
+  onPress: (id: string) => void;
+  onSwitchToList: () => void;
+}) {
+  const [mapFailed, setMapFailed] = useState(false);
+
+  if (mapFailed) {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-50 px-8">
+        <Feather name="alert-triangle" size={48} color="#cbd5e1" />
+        <Text className="text-slate-500 font-semibold text-base mt-4 text-center">Map unavailable</Text>
+        <Text className="text-slate-400 text-sm text-center mt-1">
+          There was a problem loading the map.
+        </Text>
+        <TouchableOpacity
+          onPress={onSwitchToList}
+          className="mt-5 bg-primary-500 rounded-2xl px-6 py-3"
+        >
+          <Text className="text-white font-semibold">Switch to List View</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  try {
+    return (
+      <ListingsMap
+        listings={listings}
+        onPress={onPress}
+        onError={() => setMapFailed(true)}
+      />
+    );
+  } catch {
+    return (
+      <View className="flex-1 items-center justify-center bg-slate-50 px-8">
+        <Feather name="alert-triangle" size={48} color="#cbd5e1" />
+        <Text className="text-slate-500 font-semibold text-base mt-4 text-center">Map unavailable</Text>
+        <TouchableOpacity onPress={onSwitchToList} className="mt-5 bg-primary-500 rounded-2xl px-6 py-3">
+          <Text className="text-white font-semibold">Switch to List View</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+}
+
 /* ================================================================== */
 /*  HomeScreen                                                        */
 /* ================================================================== */
 export default function HomeScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
+  const [filterApplying, setFilterApplying] = useState(false);
   const [draftPriceMin, setDraftPriceMin] = useState("");
   const [draftPriceMax, setDraftPriceMax] = useState("");
   const [draftAvailableFrom, setDraftAvailableFrom] = useState("");
@@ -169,18 +216,30 @@ export default function HomeScreen() {
   const clearFilter = useUIStore((s) => s.clearFilter);
   const user = useAuthStore((s) => s.user);
 
-  const searchCity = listingFilters.city ?? "";
+  // Local city text for debounced search
+  const [cityText, setCityText] = useState(listingFilters.city ?? "");
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleCityChange = useCallback(
     (text: string) => {
-      updateFilter("city", text || undefined);
+      setCityText(text);
+      if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+      cityDebounceRef.current = setTimeout(() => {
+        updateFilter("city", text || undefined);
+      }, 500);
     },
     [updateFilter],
   );
 
+  // Sync cityText if filter is cleared externally
+  useEffect(() => {
+    if (!listingFilters.city) setCityText("");
+  }, [listingFilters.city]);
+
   const {
     data: listings,
     isLoading,
+    isError,
     refetch,
     isRefetching,
   } = useListings(listingFilters);
@@ -197,47 +256,47 @@ export default function HomeScreen() {
   }, [listingFilters]);
 
   const openFilters = useCallback(() => {
-    setDraftPriceMin(
-      listingFilters.price_min != null ? String(listingFilters.price_min) : "",
-    );
-    setDraftPriceMax(
-      listingFilters.price_max != null ? String(listingFilters.price_max) : "",
-    );
+    setDraftPriceMin(listingFilters.price_min != null ? String(listingFilters.price_min) : "");
+    setDraftPriceMax(listingFilters.price_max != null ? String(listingFilters.price_max) : "");
     setDraftAvailableFrom(listingFilters.available_from ?? "");
     setFilterVisible(true);
   }, [listingFilters]);
 
-  const applyAndClose = useCallback(() => {
+  const applyAndClose = useCallback(async () => {
+    setFilterApplying(true);
     const min = draftPriceMin ? Number(draftPriceMin) : undefined;
     const max = draftPriceMax ? Number(draftPriceMax) : undefined;
     updateFilter("price_min", Number.isFinite(min) ? min : undefined);
     updateFilter("price_max", Number.isFinite(max) ? max : undefined);
     updateFilter("available_from", draftAvailableFrom || undefined);
-    setFilterVisible(false);
-  }, [draftPriceMin, draftPriceMax, draftAvailableFrom, updateFilter]);
+    try {
+      await refetch();
+    } finally {
+      setFilterApplying(false);
+      setFilterVisible(false);
+    }
+  }, [draftPriceMin, draftPriceMax, draftAvailableFrom, updateFilter, refetch]);
 
   const markersData = useMemo(
-    () =>
-      (listings ?? []).filter(
-        (l: any) => l.latitude != null && l.longitude != null,
-      ),
+    () => (listings ?? []).filter((l: any) => l.latitude != null && l.longitude != null),
     [listings],
   );
 
   const firstName = user?.full_name?.split(" ")[0] ?? "there";
+
+  const hasActiveFilters = activeChips.length > 0 || !!cityText;
+  const isEmptyResults = !isLoading && !isError && (listings ?? []).length === 0;
+  const isFilteredEmpty = isEmptyResults && hasActiveFilters;
 
   /* ================================================================ */
   return (
     <View className="flex-1 bg-slate-50">
       {/* ============ Header ============ */}
       <View className="bg-white px-4 pt-3 pb-3 border-b border-slate-100">
-        {/* Greeting row */}
         {user && (
           <View className="flex-row items-center justify-between mb-3">
             <View>
-              <Text className="text-2xl font-bold text-slate-900">
-                Hi, {firstName} 👋
-              </Text>
+              <Text className="text-2xl font-bold text-slate-900">Hi, {firstName} 👋</Text>
               <Text className="text-slate-400 text-sm">Find your perfect home</Text>
             </View>
             <TouchableOpacity
@@ -258,13 +317,13 @@ export default function HomeScreen() {
               className="flex-1 ml-2 text-base text-slate-900"
               placeholder="Search by city..."
               placeholderTextColor="#94a3b8"
-              value={searchCity}
+              value={cityText}
               onChangeText={handleCityChange}
               onSubmitEditing={() => refetch()}
               returnKeyType="search"
             />
-            {searchCity.length > 0 && (
-              <TouchableOpacity onPress={() => clearFilter("city")}>
+            {cityText.length > 0 && (
+              <TouchableOpacity onPress={() => { clearFilter("city"); setCityText(""); }}>
                 <Feather name="x" size={18} color="#94a3b8" />
               </TouchableOpacity>
             )}
@@ -274,23 +333,14 @@ export default function HomeScreen() {
             className="bg-slate-100 rounded-2xl p-3"
             onPress={() => setViewMode(viewMode === "list" ? "map" : "list")}
           >
-            <Feather
-              name={viewMode === "list" ? "map" : "list"}
-              size={20}
-              color="#64748b"
-            />
+            <Feather name={viewMode === "list" ? "map" : "list"} size={20} color="#64748b" />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            className="bg-slate-100 rounded-2xl p-3"
-            onPress={openFilters}
-          >
+          <TouchableOpacity className="bg-slate-100 rounded-2xl p-3" onPress={openFilters}>
             <Feather name="sliders" size={20} color="#64748b" />
             {activeChips.length > 0 && (
               <View className="absolute -top-1 -right-1 w-4 h-4 bg-primary-500 rounded-full items-center justify-center">
-                <Text className="text-white text-[10px] font-bold">
-                  {activeChips.length}
-                </Text>
+                <Text className="text-white text-[10px] font-bold">{activeChips.length}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -327,6 +377,24 @@ export default function HomeScreen() {
           <ActivityIndicator size="large" color="#0ea5e9" />
           <Text className="text-slate-400 mt-3">Loading listings...</Text>
         </View>
+      ) : isError ? (
+        /* API error state */
+        <View className="flex-1 items-center justify-center px-8">
+          <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+            <Feather name="wifi-off" size={28} color="#ef4444" />
+          </View>
+          <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load listings</Text>
+          <Text className="text-slate-400 text-sm text-center mt-2">
+            Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+          >
+            <Feather name="refresh-cw" size={16} color="#fff" />
+            <Text className="text-white font-semibold">Tap to Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : viewMode === "list" ? (
         <FlatList
           data={listings || []}
@@ -341,7 +409,7 @@ export default function HomeScreen() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                className="mb-5 -mx-0"
+                className="mb-5"
                 contentContainerStyle={{ paddingRight: 4 }}
               >
                 {INSIGHT_CARDS.map(({ key, ...cardProps }) => (
@@ -349,24 +417,42 @@ export default function HomeScreen() {
                 ))}
               </ScrollView>
 
-              <Text className="text-slate-500 text-sm mb-3">
-                {(listings || []).length} listing
-                {(listings || []).length !== 1 ? "s" : ""} found
-              </Text>
+              {!isFilteredEmpty && (
+                <Text className="text-slate-500 text-sm mb-3">
+                  {(listings || []).length} listing{(listings || []).length !== 1 ? "s" : ""} found
+                </Text>
+              )}
             </View>
           }
           ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Feather name="inbox" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-4 text-base">No listings found</Text>
-              <Text className="text-slate-400 text-sm">Try adjusting your search</Text>
-            </View>
+            isFilteredEmpty ? (
+              /* Filtered-empty state: distinct from blank */
+              <View className="items-center justify-center py-16 px-8">
+                <Feather name="search" size={48} color="#cbd5e1" />
+                <Text className="text-slate-600 mt-4 text-base font-semibold text-center">No listings match your filters</Text>
+                <Text className="text-slate-400 text-sm text-center mt-1">Try broadening your search or clearing some filters.</Text>
+                <TouchableOpacity
+                  onPress={() => { clearFilters(); setCityText(""); }}
+                  className="mt-5 border border-slate-300 rounded-2xl px-6 py-2.5"
+                >
+                  <Text className="text-slate-600 font-semibold">Clear Filters</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              /* Generic empty */
+              <View className="items-center justify-center py-20">
+                <Feather name="inbox" size={48} color="#cbd5e1" />
+                <Text className="text-slate-400 mt-4 text-base">No listings found</Text>
+                <Text className="text-slate-400 text-sm">Try adjusting your search</Text>
+              </View>
+            )
           }
         />
       ) : (
-        <ListingsMap
+        <MapWithErrorBoundary
           listings={markersData}
           onPress={(id: string) => router.push(`/listing/${id}`)}
+          onSwitchToList={() => setViewMode("list")}
         />
       )}
 
@@ -393,34 +479,28 @@ export default function HomeScreen() {
         visible={filterVisible}
         transparent
         animationType="slide"
-        onRequestClose={applyAndClose}
+        onRequestClose={() => setFilterVisible(false)}
       >
         <View className="flex-1 justify-end bg-black/40">
           <View className="bg-white rounded-t-3xl max-h-[85%]">
             <View className="flex-row items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100">
               <Text className="text-lg font-bold text-slate-900">Filters</Text>
-              <TouchableOpacity onPress={applyAndClose}>
+              <TouchableOpacity onPress={() => setFilterVisible(false)}>
                 <Feather name="x" size={22} color="#64748b" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              className="px-5"
-              contentContainerStyle={{ paddingBottom: 32 }}
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView className="px-5" contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
               <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">City</Text>
               <TextInput
                 className="bg-slate-100 rounded-xl px-3 py-2.5 text-base text-slate-900"
                 placeholder="e.g. San Francisco"
                 placeholderTextColor="#94a3b8"
-                value={searchCity}
+                value={cityText}
                 onChangeText={handleCityChange}
               />
 
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Price Range ($/mo)
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Price Range ($/mo)</Text>
               <View className="flex-row gap-3">
                 <TextInput
                   className="flex-1 bg-slate-100 rounded-xl px-3 py-2.5 text-base text-slate-900"
@@ -447,22 +527,10 @@ export default function HomeScreen() {
                   return (
                     <TouchableOpacity
                       key={rt.value}
-                      onPress={() =>
-                        updateFilter("room_type", active ? undefined : rt.value)
-                      }
-                      className={`rounded-full px-3.5 py-2 border ${
-                        active
-                          ? "bg-primary-500 border-primary-500"
-                          : "bg-white border-slate-200"
-                      }`}
+                      onPress={() => updateFilter("room_type", active ? undefined : rt.value)}
+                      className={`rounded-full px-3.5 py-2 border ${active ? "bg-primary-500 border-primary-500" : "bg-white border-slate-200"}`}
                     >
-                      <Text
-                        className={`text-sm font-medium ${
-                          active ? "text-white" : "text-slate-700"
-                        }`}
-                      >
-                        {rt.label}
-                      </Text>
+                      <Text className={`text-sm font-medium ${active ? "text-white" : "text-slate-700"}`}>{rt.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -475,22 +543,10 @@ export default function HomeScreen() {
                   return (
                     <TouchableOpacity
                       key={pt.value}
-                      onPress={() =>
-                        updateFilter("property_type", active ? undefined : pt.value)
-                      }
-                      className={`rounded-full px-3.5 py-2 border ${
-                        active
-                          ? "bg-primary-500 border-primary-500"
-                          : "bg-white border-slate-200"
-                      }`}
+                      onPress={() => updateFilter("property_type", active ? undefined : pt.value)}
+                      className={`rounded-full px-3.5 py-2 border ${active ? "bg-primary-500 border-primary-500" : "bg-white border-slate-200"}`}
                     >
-                      <Text
-                        className={`text-sm font-medium ${
-                          active ? "text-white" : "text-slate-700"
-                        }`}
-                      >
-                        {pt.label}
-                      </Text>
+                      <Text className={`text-sm font-medium ${active ? "text-white" : "text-slate-700"}`}>{pt.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -500,39 +556,23 @@ export default function HomeScreen() {
                 <Text className="text-sm font-semibold text-slate-700">Utilities Included</Text>
                 <Switch
                   value={listingFilters.utilities_included === true}
-                  onValueChange={(val) =>
-                    updateFilter("utilities_included", val ? true : undefined)
-                  }
+                  onValueChange={(val) => updateFilter("utilities_included", val ? true : undefined)}
                   trackColor={{ false: "#e2e8f0", true: "#0ea5e9" }}
                   thumbColor={Platform.OS === "android" ? "#fff" : undefined}
                 />
               </View>
 
-              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">
-                Minimum Trust Score
-              </Text>
+              <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Minimum Trust Score</Text>
               <View className="flex-row gap-2">
                 {TRUST_BANDS.map((band) => {
                   const active = listingFilters.min_trust === band;
                   return (
                     <TouchableOpacity
                       key={band}
-                      onPress={() =>
-                        updateFilter("min_trust", active ? undefined : band)
-                      }
-                      className={`flex-1 rounded-xl py-2.5 items-center border ${
-                        active
-                          ? "bg-primary-500 border-primary-500"
-                          : "bg-white border-slate-200"
-                      }`}
+                      onPress={() => updateFilter("min_trust", active ? undefined : band)}
+                      className={`flex-1 rounded-xl py-2.5 items-center border ${active ? "bg-primary-500 border-primary-500" : "bg-white border-slate-200"}`}
                     >
-                      <Text
-                        className={`text-sm font-semibold ${
-                          active ? "text-white" : "text-slate-700"
-                        }`}
-                      >
-                        {band}+
-                      </Text>
+                      <Text className={`text-sm font-semibold ${active ? "text-white" : "text-slate-700"}`}>{band}+</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -545,22 +585,10 @@ export default function HomeScreen() {
                   return (
                     <TouchableOpacity
                       key={opt.value}
-                      onPress={() =>
-                        updateFilter("sort_by", active ? undefined : opt.value)
-                      }
-                      className={`rounded-full px-3.5 py-2 border ${
-                        active
-                          ? "bg-primary-500 border-primary-500"
-                          : "bg-white border-slate-200"
-                      }`}
+                      onPress={() => updateFilter("sort_by", active ? undefined : opt.value)}
+                      className={`rounded-full px-3.5 py-2 border ${active ? "bg-primary-500 border-primary-500" : "bg-white border-slate-200"}`}
                     >
-                      <Text
-                        className={`text-sm font-medium ${
-                          active ? "text-white" : "text-slate-700"
-                        }`}
-                      >
-                        {opt.label}
-                      </Text>
+                      <Text className={`text-sm font-medium ${active ? "text-white" : "text-slate-700"}`}>{opt.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -579,6 +607,7 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   onPress={() => {
                     clearFilters();
+                    setCityText("");
                     setDraftPriceMin("");
                     setDraftPriceMax("");
                     setDraftAvailableFrom("");
@@ -589,9 +618,17 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={applyAndClose}
-                  className="flex-1 bg-primary-500 rounded-xl py-3 items-center"
+                  disabled={filterApplying}
+                  className={`flex-1 rounded-xl py-3 items-center flex-row justify-center gap-2 ${filterApplying ? "bg-primary-300" : "bg-primary-500"}`}
                 >
-                  <Text className="text-white font-semibold">Apply Filters</Text>
+                  {filterApplying ? (
+                    <>
+                      <ActivityIndicator size="small" color="#fff" />
+                      <Text className="text-white font-semibold">Applying…</Text>
+                    </>
+                  ) : (
+                    <Text className="text-white font-semibold">Apply Filters</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </ScrollView>
