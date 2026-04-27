@@ -28,6 +28,7 @@ import {
   useGenerateSchedule,
   useOverrideAssignment,
   useRejectConstraint,
+  useSendChoreReminders,
   useUpdateChoreTemplate,
 } from "@/hooks/useHousehold";
 import { DAY_NAMES } from "@/lib/format";
@@ -134,6 +135,7 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
   const generateSchedule = useGenerateSchedule();
   const completeChore = useCompleteChore();
   const overrideAssignment = useOverrideAssignment();
+  const sendReminders = useSendChoreReminders();
 
   // Maps for display
   const templateMap = new Map((templates || []).map((t) => [t.id, t]));
@@ -331,6 +333,37 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
             )}
           </TouchableOpacity>
         ))}
+      </View>
+
+      {/* UH-602/UH-603: Reminder + Calendar actions */}
+      <View className="flex-row gap-2 mb-3">
+        <TouchableOpacity
+          onPress={() => {
+            sendReminders.mutate(undefined, {
+              onSuccess: (data) => {
+                const msg = data.sent > 0
+                  ? `${data.sent} reminder${data.sent !== 1 ? "s" : ""} sent`
+                  : data.message ?? "No pending chores today";
+                Alert.alert("Reminders", msg);
+              },
+              onError: () => Alert.alert("Error", "Could not send reminders"),
+            });
+          }}
+          disabled={sendReminders.isPending}
+          className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5 rounded-xl bg-amber-50 border border-amber-100"
+        >
+          <Feather name="bell" size={14} color="#f59e0b" />
+          <Text className="text-amber-600 text-sm font-semibold">
+            {sendReminders.isPending ? "Sending..." : "Send Reminders"}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => Alert.alert("Calendar Export", "Download chores.ics from:\n/api/v1/chores/calendar.ics\n\nOpen in your calendar app to import.")}
+          className="flex-1 flex-row items-center justify-center gap-1.5 py-2.5 rounded-xl bg-blue-50 border border-blue-100"
+        >
+          <Feather name="download" size={14} color="#0ea5e9" />
+          <Text className="text-primary-600 text-sm font-semibold">Export iCal</Text>
+        </TouchableOpacity>
       </View>
 
       {/* ── MY TASKS ──────────────────────────────────────── */}
