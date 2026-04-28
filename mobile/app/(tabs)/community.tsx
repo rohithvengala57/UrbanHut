@@ -331,9 +331,7 @@ export default function CommunityScreen() {
       </View>
 
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#0ea5e9" />
-        </View>
+        <SkeletonLoader count={3} style={{ padding: 16 }} />
       ) : (
         <FlatList
           data={posts || []}
@@ -438,18 +436,11 @@ export default function CommunityScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        onPress={() => setShowCreateModal(true)}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
-        style={{
-          elevation: 8,
-          shadowColor: "#0ea5e9",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.4,
-          shadowRadius: 12,
-        }}
+        onPress={() => setCreateVisible(true)}
+        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-elevated"
         activeOpacity={0.85}
       >
-        <Feather name="edit-3" size={24} color="#fff" />
+        <Feather name="plus" size={26} color="#fff" />
       </TouchableOpacity>
 
       {replyPost && (
@@ -457,21 +448,17 @@ export default function CommunityScreen() {
       )}
 
       {showSuccessToast && (
-        <View 
-          className="absolute bottom-24 left-10 right-10 bg-slate-800 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2"
-          style={{ elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10 }}
-        >
-          <Feather name="check-circle" size={16} color="#10b981" />
+        <View
+          className="absolute bottom-24 left-10 right-10 bg-slate-800 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2 shadow-elevated"
+        >          <Feather name="check-circle" size={16} color="#10b981" />
           <Text className="text-white font-bold">Post created!</Text>
         </View>
       )}
 
       {errorToast && (
-        <View 
-          className="absolute bottom-24 left-10 right-10 bg-red-500 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2"
-          style={{ elevation: 10, shadowColor: "#000", shadowOpacity: 0.2, shadowRadius: 10 }}
-        >
-          <Feather name="alert-circle" size={16} color="#fff" />
+        <View
+          className="absolute bottom-24 left-10 right-10 bg-red-500 rounded-2xl py-3 px-4 flex-row items-center justify-center gap-2 shadow-elevated"
+        >          <Feather name="alert-circle" size={16} color="#fff" />
           <Text className="text-white font-bold">{errorToast}</Text>
         </View>
       )}

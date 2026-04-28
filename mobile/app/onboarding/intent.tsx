@@ -36,9 +36,20 @@ export default function IntentScreen() {
     if (!selectedIntent) return;
     setLoading(true);
     try {
-      // Mapping intent to role or metadata if needed
-      // For now we'll just store it in onboarding_metadata if we want, 
-      // but let's just proceed to next step for the wizard flow.
+      // Mapping intent to role or metadata
+      const user = useAuthStore.getState().user;
+      const onboarding_metadata = {
+        ...user?.onboarding_metadata,
+        intent: selectedIntent,
+        steps: {
+          ...user?.onboarding_metadata?.steps,
+        }
+      };
+      
+      await updateProfile({ onboarding_metadata } as any);
+      router.push("/onboarding/lifestyle");
+    } catch (e) {
+      console.error(e);
       router.push("/onboarding/lifestyle");
     } finally {
       setLoading(false);

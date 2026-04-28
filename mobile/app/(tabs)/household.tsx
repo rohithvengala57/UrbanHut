@@ -256,14 +256,7 @@ export default function HouseholdScreen() {
           <View>
             {/* Summary gradient card */}
             <View
-              className="rounded-3xl overflow-hidden mb-4"
-              style={{
-                shadowColor: "#0ea5e9",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 16,
-                elevation: 6,
-              }}
+              className="rounded-3xl overflow-hidden mb-4 shadow-elevated"
             >
               <Svg
                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}

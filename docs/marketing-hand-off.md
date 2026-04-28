@@ -23,13 +23,33 @@ This document contains the layouts, assets, and design specifications for the CM
 3. **Move in confidently**: Use built-in tools to manage your new home.
 
 ### Feature Spotlights
-- **Compatibility Scoring**: Animated progress ring (Primary Green `#10b981`).
-- **Shared Expenses**: Screenshot showing "Rent Split" and "Utility Tracker".
-- **Community**: Screenshot showing "Roommate Wanted" and "Neighborhood Tips" posts.
+- **Compatibility Scoring**: Animated progress ring (Primary Green `#10b981`) showing a percentage match.
+- **Shared Expenses**: Screenshot showing "Rent Split" and "Utility Tracker" with balanced ledgers.
+- **Community**: Screenshot showing "Roommate Wanted" and "Neighborhood Tips" posts with upvotes.
 
 ---
 
-## 2. Onboarding Wizard (Post-Signup Flow)
+## 2. Testimonials (High-Conversion Social Proof)
+
+Each card should include an avatar, name, city, and a short quote.
+
+| Name | City | Quote |
+|------|------|-------|
+| Sarah J. | Jersey City | "Found my current roommate in 3 days. The trust score made me feel so much safer." |
+| Mark T. | Manhattan | "Split expenses finally stopped being a monthly argument. UrbanHut is a lifesaver." |
+| Elena R. | Hoboken | "The lifestyle matching is scarily accurate. We actually both love quiet mornings!" |
+
+---
+
+## 3. Footer CTA
+
+- **Headline**: "Ready to find your perfect roommate?"
+- **Subheadline**: "Join thousands of verified users in Jersey City and New York."
+- **Button**: [Get Started Free] (Primary Gradient Button)
+
+---
+
+## 4. Onboarding Wizard (Post-Signup Flow)
 
 The new 5-step onboarding wizard is implemented in the mobile app to maximize user conversion and data collection for the matching engine.
 
@@ -43,7 +63,7 @@ The new 5-step onboarding wizard is implemented in the mobile app to maximize us
 
 ---
 
-## 3. Design Tokens (Single Source of Truth)
+## 5. Design Tokens (Single Source of Truth)
 
 All assets should follow these consolidated tokens from `theme.ts`:
 
@@ -60,7 +80,7 @@ All assets should follow these consolidated tokens from `theme.ts`:
 
 ---
 
-## 4. Web Component Snippets (CSS/HTML)
+## 6. Web Component Snippets (CSS/HTML)
 
 ### Primary Gradient Button
 ```html

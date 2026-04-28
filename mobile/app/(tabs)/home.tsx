@@ -460,14 +460,7 @@ export default function HomeScreen() {
       {viewMode === "list" && (
         <TouchableOpacity
           onPress={() => router.push("/listing/create")}
-          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
-          style={{
-            elevation: 8,
-            shadowColor: "#0ea5e9",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-          }}
+          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-elevated"
           activeOpacity={0.85}
         >
           <Feather name="plus" size={26} color="#fff" />
