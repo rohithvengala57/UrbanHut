@@ -1,0 +1,10 @@
+# Terraform state and secrets
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!example.tfvars
+
+# Lambda build artifacts
+../backend/dist/

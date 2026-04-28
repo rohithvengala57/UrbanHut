@@ -3,7 +3,6 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://urbanhut:urbanhut_dev@localhost:5432/urbanhut"
-    REDIS_URL: str = "redis://localhost:6379/0"
 
     # Must be set via env in production — no insecure default
     JWT_SECRET_KEY: str
@@ -19,6 +18,7 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_REGION: str = "us-east-1"
+    DYNAMODB_RATE_LIMIT_TABLE: str = "urbanhut-rate-limits"
 
     EXPO_ACCESS_TOKEN: str = ""
 
