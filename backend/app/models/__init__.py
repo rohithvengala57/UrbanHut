@@ -1,6 +1,7 @@
 from app.models.analytics import TelemetryEvent, UserAttribution
 from app.models.appointment import Appointment
 from app.models.inquiry import ListingInquiry
+from app.models.otp_code import OtpCode
 from app.models.chat import ChatMessage, ChatRoom
 from app.models.chore import ChoreAssignment, ChoreConstraint, ChoreTemplate
 from app.models.community import CommunityPost, CommunityReply, PostUpvote
@@ -50,4 +51,5 @@ __all__ = [
     "SavedListing",
     "SavedSearch",
     "RefreshToken",
+    "OtpCode",
 ]

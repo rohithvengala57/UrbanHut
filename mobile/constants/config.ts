@@ -1,6 +1,7 @@
+// Dev fallback for local runs only. Production should always set EXPO_PUBLIC_API_URL.
 import { colors } from "./theme";
-
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8000";
+export const IS_API_URL_FALLBACK = !process.env.EXPO_PUBLIC_API_URL;
 export const API_BASE = `${API_URL}/api/v1`;
 
 export const COLORS = {

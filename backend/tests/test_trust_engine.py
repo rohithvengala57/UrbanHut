@@ -118,11 +118,13 @@ class TestFinancialPillar:
         score = engine._calc_financial(events)
         assert score <= PILLAR_WEIGHTS["financial"]
 
-    def test_score_never_negative(self):
+    def test_large_penalty_equals_full_amount(self):
+        # Pillar score can go negative; the total-score floor (BASELINE_SCORE) lives
+        # at the calculate() level, not inside the pillar helper.
         engine = _make_engine()
         events = [_make_event("financial", "bill_paid_late", -50, days_ago=0)]
         score = engine._calc_financial(events)
-        assert score >= 0.0
+        assert abs(score - (-50)) < 0.01
 
 
 # ─── Household pillar ─────────────────────────────────────────────────────────

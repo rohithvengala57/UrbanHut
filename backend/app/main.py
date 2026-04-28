@@ -59,9 +59,7 @@ _API_VERSION = "0.1.0"
 async def lifespan(app: FastAPI):
     from app.config import settings
 
-    # Mask sensitive parts of URLs for logging
     db_url_safe = settings.DATABASE_URL.split("@")[-1] if "@" in settings.DATABASE_URL else settings.DATABASE_URL
-    redis_url_safe = settings.REDIS_URL.split("@")[-1] if "@" in settings.REDIS_URL else settings.REDIS_URL
 
     log.info(
         "startup",
@@ -69,9 +67,9 @@ async def lifespan(app: FastAPI):
         api_version=_API_VERSION,
         min_app_version=MIN_APP_VERSION,
         db_host=db_url_safe,
-        redis_host=redis_url_safe,
         jwt_algorithm=settings.JWT_ALGORITHM,
         s3_bucket=settings.AWS_S3_BUCKET or "not_configured",
+        dynamo_rate_limit_table=settings.DYNAMODB_RATE_LIMIT_TABLE,
     )
 
     try:
@@ -106,9 +104,13 @@ app = FastAPI(
 
 # ─── Middleware (order matters — outermost first) ─────────────────────────────
 
+from app.config import settings as _settings
+
+_cors_origins = [o.strip() for o in _settings.CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

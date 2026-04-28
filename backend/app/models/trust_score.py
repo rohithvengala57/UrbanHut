@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, func
 from sqlalchemy.dialects.postgresql import UUID
+from app.utils.db_types import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -19,7 +20,7 @@ class TrustEvent(Base):
     category: Mapped[str] = mapped_column(String(30), nullable=False)
     event_type: Mapped[str] = mapped_column(String(50), nullable=False)
     points_delta: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
-    event_metadata: Mapped[dict | None] = mapped_column("metadata", JSON)
+    event_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB)
     decayed: Mapped[bool] = mapped_column(Boolean, default=False)
     decay_factor: Mapped[float] = mapped_column(Numeric(3, 2), default=1.0)
 

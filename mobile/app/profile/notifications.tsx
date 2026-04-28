@@ -59,7 +59,7 @@ export default function NotificationsScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator />
+        <ActivityIndicator color="#10b981" />
       </View>
     );
   }
@@ -87,7 +87,7 @@ export default function NotificationsScreen() {
             <Switch
               value={prefs[setting.key] ?? true}
               onValueChange={() => toggle(setting.key)}
-              trackColor={{ false: "#e2e8f0", true: "#0ea5e9" }}
+              trackColor={{ false: "#e2e8f0", true: "#10b981" }}
               thumbColor="#fff"
             />
           </View>

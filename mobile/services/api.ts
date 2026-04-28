@@ -1,7 +1,8 @@
 import axios from "axios";
 
-import { API_BASE } from "@/constants/config";
+import { API_BASE, API_URL, IS_API_URL_FALLBACK } from "@/constants/config";
 import { deleteItem, getItem, setItem } from "@/lib/storage";
+import { useUIStore } from "@/stores/uiStore";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -22,8 +23,21 @@ api.interceptors.request.use(async (config) => {
 
 // Response interceptor — handle token refresh
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Clear any previous connectivity warning once a request succeeds.
+    useUIStore.getState().setApiWarning(null);
+    return response;
+  },
   async (error) => {
+    if (!error.response) {
+      const fallbackHint = IS_API_URL_FALLBACK
+        ? ` App is using fallback API URL (${API_URL}). Set EXPO_PUBLIC_API_URL if this is not your local API.`
+        : "";
+      useUIStore
+        .getState()
+        .setApiWarning(`Can't reach server at ${API_URL}.${fallbackHint}`);
+    }
+
     const originalRequest = error.config;
 
     if (error.response?.status === 401 && !originalRequest._retry) {

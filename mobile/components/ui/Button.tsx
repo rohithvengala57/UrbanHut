@@ -42,15 +42,15 @@ export function Button({
     ghost: "text-primary-500 font-medium",
   };
   const textSizeStyles = {
-    sm: "text-sm",
-    md: "text-base",
-    lg: "text-lg",
+    sm: "text-xs",
+    md: "text-sm",
+    lg: "text-base",
   };
 
   const content = (
     <View className="flex-row items-center gap-2">
       {loading ? (
-        <ActivityIndicator color={variant === "primary" || variant === "secondary" ? "#fff" : "#0ea5e9"} />
+        <ActivityIndicator color={variant === "primary" || variant === "secondary" ? "#fff" : "#10b981"} />
       ) : (
         <>
           {icon}
@@ -84,4 +84,3 @@ export function Button({
     </TouchableOpacity>
   );
 }
-

@@ -1,7 +1,8 @@
 import uuid
 from datetime import date
 
-from sqlalchemy import JSON, Date, ForeignKey, Integer, String
+from sqlalchemy import Date, ForeignKey, Integer, String
+from app.utils.db_types import ARRAY
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,7 +25,7 @@ class UserSearchPreferences(Base):
 
     current_city: Mapped[str | None] = mapped_column(String(100), index=True)
     current_state: Mapped[str | None] = mapped_column(String(50))
-    looking_in: Mapped[list[str] | None] = mapped_column(JSON)
+    looking_in: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     budget_min: Mapped[int | None] = mapped_column(Integer)
     budget_max: Mapped[int | None] = mapped_column(Integer)
     move_in_date: Mapped[date | None] = mapped_column(Date)

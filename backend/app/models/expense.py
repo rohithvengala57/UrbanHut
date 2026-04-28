@@ -1,8 +1,9 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
+from app.utils.db_types import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -24,7 +25,7 @@ class Expense(Base):
     category: Mapped[str] = mapped_column(String(30), nullable=False)
 
     split_type: Mapped[str] = mapped_column(String(20), default="equal")
-    split_details: Mapped[dict | None] = mapped_column(JSON)
+    split_details: Mapped[dict | None] = mapped_column(JSONB)
 
     receipt_url: Mapped[str | None] = mapped_column(Text)
     date: Mapped[date] = mapped_column(Date, nullable=False)

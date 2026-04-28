@@ -270,7 +270,7 @@ export default function ProfileScreen() {
               <View
                 key={item.label}
                 className="bg-slate-50 rounded-2xl px-3 py-2.5 flex-row items-center gap-2"
-                style={{ width: "48%" }}
+                style={{ flexBasis: "48%", flexGrow: 0 }}
               >
                 <View className="w-8 h-8 bg-white rounded-xl items-center justify-center">
                   <Feather name={item.icon} size={14} color="#0ea5e9" />

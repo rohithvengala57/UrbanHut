@@ -1,12 +1,14 @@
-"""Notification service — Expo push + Resend email delivery."""
+"""Notification service — Expo push and Resend email."""
 
 import logging
 import os
 from typing import Any
 
 import httpx
+import structlog
 
-logger = logging.getLogger(__name__)
+log = structlog.get_logger("app.services.notification_service")
+logger = logging.getLogger(__name__) # Keep for compatibility if needed, but prefer log
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 RESEND_API_URL = "https://api.resend.com/emails"
@@ -38,26 +40,52 @@ class NotificationService:
         if not push_token:
             return
         if not push_token.startswith("ExponentPushToken["):
-            logger.debug("push_token %s is not an Expo token, skipping", push_token)
+            log.debug("push_token_invalid_format", push_token=push_token)
             return
 
-        payload = {"to": push_token, "title": title, "body": body}
+        from app.config import settings
+        expo_token = settings.EXPO_ACCESS_TOKEN
+
+        payload = {
+            "to": push_token,
+            "title": title,
+            "body": body,
+        }
         if data:
-            payload["data"] = data  # type: ignore[assignment]
+            payload["data"] = data
+
+        headers = {
+            "Accept": "application/json",
+            "Accept-Encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+        }
+        if expo_token:
+            headers["Authorization"] = f"Bearer {expo_token}"
 
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.post(EXPO_PUSH_URL, json=payload)
-                if resp.status_code != 200:
-                    logger.warning("Expo push failed %s: %s", resp.status_code, resp.text)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(EXPO_PUSH_URL, json=payload, headers=headers)
+                if response.status_code != 200:
+                    log.warning(
+                        "expo_push_failed",
+                        status_code=response.status_code,
+                        response=response.text,
+                        push_token=push_token,
+                    )
+                else:
+                    log.info(
+                        "expo_push_sent",
+                        push_token=push_token,
+                        title=title,
+                    )
         except Exception as exc:
-            logger.warning("Expo push error: %s", exc)
+            log.error("expo_push_error", error=str(exc), push_token=push_token)
 
     async def send_email(self, to_email: str, subject: str, html_body: str) -> None:
         api_key = os.getenv("RESEND_API_KEY")
         from_addr = os.getenv("RESEND_FROM_EMAIL", "noreply@urbanhut.app")
         if not api_key:
-            logger.debug("RESEND_API_KEY not set, skipping email to %s", to_email)
+            log.debug("resend_api_key_not_set", to_email=to_email)
             return
 
         payload = {
@@ -74,9 +102,9 @@ class NotificationService:
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
                 if resp.status_code not in (200, 201):
-                    logger.warning("Resend email failed %s: %s", resp.status_code, resp.text)
+                    log.warning("resend_email_failed", status_code=resp.status_code, response=resp.text)
         except Exception as exc:
-            logger.warning("Resend email error: %s", exc)
+            log.error("resend_email_error", error=str(exc))
 
     async def notify_new_interest(
         self,

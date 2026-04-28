@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   ScrollView,
@@ -119,11 +120,36 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
     max_frequency: "",
   });
 
-  const { data: templates } = useChoreTemplates(true);
-  const { data: constraints } = useChoreConstraints(true);
-  const { data: schedule } = useChoreSchedule(true);
-  const { data: points } = useChorePoints(true);
-  const { data: performance } = useChorePerformance(4, true);
+  const {
+    data: templates,
+    isLoading: templatesLoading,
+    isError: templatesError,
+    refetch: refetchTemplates,
+  } = useChoreTemplates(true);
+  const {
+    data: constraints,
+    isLoading: constraintsLoading,
+    isError: constraintsError,
+    refetch: refetchConstraints,
+  } = useChoreConstraints(true);
+  const {
+    data: schedule,
+    isLoading: scheduleLoading,
+    isError: scheduleError,
+    refetch: refetchSchedule,
+  } = useChoreSchedule(true);
+  const {
+    data: points,
+    isLoading: pointsLoading,
+    isError: pointsError,
+    refetch: refetchPoints,
+  } = useChorePoints(true);
+  const {
+    data: performance,
+    isLoading: performanceLoading,
+    isError: performanceError,
+    refetch: refetchPerformance,
+  } = useChorePerformance(4, true);
 
   const createTemplate = useCreateChoreTemplate();
   const updateTemplate = useUpdateChoreTemplate();
@@ -304,6 +330,53 @@ export function ChoresTab({ members, isAdmin = false }: Props) {
   const historyAssignments = [...completedAssignments, ...missedAssignments].sort((a, b) => 
     new Date(b.week_start).getTime() - new Date(a.week_start).getTime()
   );
+  const choresLoading =
+    templatesLoading ||
+    constraintsLoading ||
+    scheduleLoading ||
+    pointsLoading ||
+    performanceLoading;
+  const choresError =
+    templatesError ||
+    constraintsError ||
+    scheduleError ||
+    pointsError ||
+    performanceError;
+
+  if (choresLoading) {
+    return (
+      <View className="flex-1 items-center justify-center py-10">
+        <ActivityIndicator size="large" color="#0ea5e9" />
+      </View>
+    );
+  }
+
+  if (choresError) {
+    return (
+      <View className="flex-1 items-center justify-center px-8 py-10">
+        <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+          <Feather name="wifi-off" size={28} color="#ef4444" />
+        </View>
+        <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load chores</Text>
+        <Text className="text-slate-400 text-sm text-center mt-2">
+          Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          onPress={() => {
+            refetchTemplates();
+            refetchConstraints();
+            refetchSchedule();
+            refetchPoints();
+            refetchPerformance();
+          }}
+          className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+        >
+          <Feather name="refresh-cw" size={16} color="#fff" />
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1">

@@ -18,6 +18,7 @@ interface UIState {
   listingViewMode: "list" | "map";
   listingFilters: ListingFilters;
   compareIds: string[];
+  apiWarning: string | null;
 
   setTheme: (theme: "light" | "dark") => void;
   completeOnboarding: () => void;
@@ -28,6 +29,7 @@ interface UIState {
   clearFilter: (key: keyof ListingFilters) => void;
   toggleCompare: (id: string) => void;
   clearCompare: () => void;
+  setApiWarning: (message: string | null) => void;
 }
 
 const EMPTY_FILTERS: ListingFilters = {};
@@ -38,6 +40,7 @@ export const useUIStore = create<UIState>((set) => ({
   listingViewMode: "list",
   listingFilters: {},
   compareIds: [],
+  apiWarning: null,
 
   setTheme: (theme) => set({ theme }),
   completeOnboarding: () => set({ onboardingComplete: true }),
@@ -64,4 +67,5 @@ export const useUIStore = create<UIState>((set) => ({
       };
     }),
   clearCompare: () => set({ compareIds: [] }),
+  setApiWarning: (message) => set({ apiWarning: message }),
 }));

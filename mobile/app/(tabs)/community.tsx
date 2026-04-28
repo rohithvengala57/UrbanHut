@@ -228,23 +228,25 @@ export default function CommunityScreen() {
   const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
 
-  const { data: posts, isLoading, refetch, isRefetching } = useQuery<Post[]>({
+  const { data: posts, isLoading, isError, refetch, isRefetching } = useQuery<Post[]>({
     queryKey: ["community-posts", user?.current_city, selectedType],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (user?.current_city) params.append("city", user.current_city);
       if (selectedType !== "all") params.append("type", selectedType);
-      const response = await api.get(`/community/posts?${params.toString()}`);
+      const query = params.toString();
+      const response = await api.get(query ? `/community/posts?${query}` : "/community/posts");
       return response.data;
     },
   });
 
   const createPost = useMutation({
     mutationFn: async (data: { type: string; title: string; body: string }) => {
-      const response = await api.post("/community/posts", {
+      const payload = {
         ...data,
-        city: user?.current_city || "Jersey City",
-      });
+        ...(user?.current_city ? { city: user.current_city } : {}),
+      };
+      const response = await api.post("/community/posts", payload);
       return response.data;
     },
     onSuccess: () => {
@@ -332,6 +334,23 @@ export default function CommunityScreen() {
 
       {isLoading ? (
         <SkeletonLoader count={3} style={{ padding: 16 }} />
+      ) : isError ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+            <Feather name="wifi-off" size={28} color="#ef4444" />
+          </View>
+          <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load community posts</Text>
+          <Text className="text-slate-400 text-sm text-center mt-2">
+            Check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            onPress={() => refetch()}
+            className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+          >
+            <Feather name="refresh-cw" size={16} color="#fff" />
+            <Text className="text-white font-semibold">Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <FlatList
           data={posts || []}
@@ -436,7 +455,7 @@ export default function CommunityScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        onPress={() => setCreateVisible(true)}
+        onPress={() => setShowCreateModal(true)}
         className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-elevated"
         activeOpacity={0.85}
       >
@@ -536,6 +555,10 @@ export default function CommunityScreen() {
               <Button
                 title="Post"
                 onPress={() => {
+                  if (!user?.current_city) {
+                    Alert.alert("City required", "Set your current city in profile before posting.");
+                    return;
+                  }
                   if (!createForm.title.trim() || !createForm.body.trim()) {
                     Alert.alert("Error", "Please fill in title and body");
                     return;

@@ -737,13 +737,13 @@ async def host_decide_interest(
     previous_status = interest.status
     interest.status = new_status
 
-    # If accepted, check for mutual interest (seeker also interested in host)
+    # If accepted, mark as mutual only when host has an explicit reciprocal interest.
     if new_status == "accepted":
         mutual_check = await db.execute(
             select(MatchInterest).where(
                 and_(
-                    MatchInterest.from_user_id == interest.from_user_id,
-                    MatchInterest.to_listing_id == listing_id,
+                    MatchInterest.from_user_id == current_user.id,
+                    MatchInterest.to_user_id == interest.from_user_id,
                     MatchInterest.status.in_(["interested", "shortlisted", "accepted"]),
                 )
             )
@@ -942,7 +942,19 @@ async def upload_listing_image(
 
     try:
         keys = process_and_upload_image(file_bytes, key_prefix)
-    except Exception as exc:
+    except RuntimeError as exc:
+        # S3 not configured
+        log.error(
+            "listing_image_upload_s3_not_configured",
+            user_id=str(current_user.id),
+            listing_id=str(listing_id),
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Image upload is not available: storage is not configured.",
+        )
+    except OSError as exc:
         log.error(
             "listing_image_processing_failed",
             user_id=str(current_user.id),

@@ -1,64 +1,28 @@
 """
-Redis sliding window rate limiter for auth endpoints.
+DynamoDB-based rate limiter for auth endpoints.
+Replaces Redis to ensure perpetual $0 cost on AWS Free Tier.
 
 Limits:
-  /auth/login           → 5 attempts per 15 min per email
-  /auth/signup          → 3 per hour per IP
-  /auth/verify-email    → 5 per hour per user
-  /auth/forgot-password → 3 per hour per email
+  /auth/login               → 5 attempts per 15 min per email
+  /auth/signup              → 3 per hour per IP
+  /auth/verify-email        → 5 per hour per user
+  /auth/resend-verification → 5 per hour per user
+  /auth/phone/request-otp   → 5 per hour per user
 """
 
-import time
+import json
 
 import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from redis.asyncio import Redis
-from redis.exceptions import RedisError
 
-from app.config import settings
+from app.utils.rate_limit import check_rate_limit
 
 log = structlog.get_logger("app.middleware.rate_limit")
 
 
-async def get_redis() -> Redis:
-    return Redis.from_url(settings.REDIS_URL, decode_responses=True)
-
-
-async def _check_rate_limit(
-    redis: Redis,
-    key: str,
-    max_requests: int,
-    window_seconds: int,
-) -> tuple[bool, int]:
-    """
-    Sliding window rate limit check.
-    Returns (is_allowed, retry_after_seconds).
-    """
-    now = time.time()
-    window_start = now - window_seconds
-
-    pipe = redis.pipeline()
-    pipe.zremrangebyscore(key, "-inf", window_start)
-    pipe.zadd(key, {str(now): now})
-    pipe.zcard(key)
-    pipe.expire(key, window_seconds)
-    results = await pipe.execute()
-
-    count = results[2]
-    if count > max_requests:
-        oldest = await redis.zrange(key, 0, 0, withscores=True)
-        retry_after = window_seconds
-        if oldest:
-            oldest_ts = oldest[0][1]
-            retry_after = max(0, int(window_seconds - (now - oldest_ts)))
-        return False, retry_after
-
-    return True, 0
-
-
 class RateLimitMiddleware:
-    """ASGI middleware that rate-limits auth endpoints."""
+    """ASGI middleware that rate-limits auth endpoints using DynamoDB."""
 
     LIMITS: dict[str, tuple[str, int, int]] = {
         # path_suffix: (key_source, max_requests, window_seconds)
@@ -121,7 +85,6 @@ class RateLimitMiddleware:
         elif key_source == "email":
             # Read body to get email; only works for JSON POST
             cached_body = await request.body()
-            import json
             try:
                 data = json.loads(cached_body)
                 identifier = data.get("email", request.client.host if request.client else "unknown")
@@ -139,22 +102,7 @@ class RateLimitMiddleware:
             identifier = auth[-20:] if auth else "anon"
             rl_key = f"rl:{path}:{identifier}"
 
-        redis = await get_redis()
-        try:
-            try:
-                allowed, retry_after = await _check_rate_limit(redis, rl_key, max_req, window)
-            except RedisError as redis_exc:
-                # Fail open in local/dev when Redis is unavailable so the API can boot.
-                log.warning(
-                    "rate_limit_redis_unavailable",
-                    path=path,
-                    error=str(redis_exc),
-                    action="failing_open",
-                )
-                await self._call_downstream(scope, receive, send, cached_body)
-                return
-        finally:
-            await redis.aclose()
+        allowed, retry_after = await check_rate_limit(rl_key, max_req, window)
 
         if not allowed:
             log.warning(
