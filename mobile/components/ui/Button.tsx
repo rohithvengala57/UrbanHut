@@ -20,28 +20,28 @@ export function Button({
   disabled = false,
   icon,
 }: ButtonProps) {
-  const baseStyle = "rounded-xl flex-row items-center justify-center";
+  const baseStyle = "rounded-2xl flex-row items-center justify-center";
   const sizeStyles = {
     sm: "px-4 py-2",
     md: "px-6 py-3",
     lg: "px-8 py-4",
   };
   const variantStyles = {
-    primary: "bg-primary-500",
+    primary: "bg-[#10b981]",
     secondary: "bg-slate-700",
-    outline: "border-2 border-primary-500",
+    outline: "border-2 border-[#10b981]",
     ghost: "",
   };
   const textVariantStyles = {
-    primary: "text-white font-semibold",
-    secondary: "text-white font-semibold",
-    outline: "text-primary-500 font-semibold",
-    ghost: "text-primary-500 font-medium",
+    primary: "text-white font-bold",
+    secondary: "text-white font-bold",
+    outline: "text-[#10b981] font-bold",
+    ghost: "text-[#10b981] font-bold",
   };
   const textSizeStyles = {
-    sm: "text-sm",
-    md: "text-base",
-    lg: "text-lg",
+    sm: "text-xs",
+    md: "text-sm",
+    lg: "text-base",
   };
 
   return (
@@ -51,7 +51,7 @@ export function Button({
       className={`${baseStyle} ${sizeStyles[size]} ${variantStyles[variant]} ${disabled ? "opacity-50" : ""}`}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? "#fff" : "#0ea5e9"} />
+        <ActivityIndicator color={variant === "primary" ? "#fff" : "#10b981"} />
       ) : (
         <View className="flex-row items-center gap-2">
           {icon}

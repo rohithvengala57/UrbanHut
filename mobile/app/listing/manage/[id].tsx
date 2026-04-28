@@ -168,7 +168,7 @@ export default function ManageListingScreen() {
   if (listingLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#0ea5e9" />
+        <ActivityIndicator size="large" color="#10b981" />
       </View>
     );
   }
@@ -185,197 +185,311 @@ export default function ManageListingScreen() {
     );
   }
 
-  const STATUS_COLORS: Record<string, string> = {
-    active: "#22c55e",
-    paused: "#f59e0b",
-    draft: "#64748b",
-    closed: "#ef4444",
-  };
-
   return (
-    <View className="flex-1 bg-slate-50">
+    <View className="flex-1 bg-white">
       {/* Header */}
-      <View className="bg-white px-4 pt-2 pb-3 border-b border-slate-100">
-        <View className="flex-row items-center justify-between mb-2">
-          <View className="flex-1 mr-3">
-            <Text className="text-lg font-bold text-slate-900" numberOfLines={1}>
-              {listing.title}
-            </Text>
-            <Text className="text-sm text-slate-500">
-              {formatCurrency(listing.rent_monthly)}/mo · {listing.city}
-            </Text>
+      <View className="bg-white px-5 pt-6 pb-2">
+        <View className="flex-row items-center justify-between mb-6">
+          <View className="flex-row items-center gap-2">
+            <View className="w-8 h-8 bg-[#10b981] rounded-lg items-center justify-center">
+              <Feather name="home" size={18} color="#fff" />
+            </View>
+            <View>
+              <Text className="text-lg font-black text-slate-900 tracking-tight">urbanhut</Text>
+              <Text className="text-[#10b981] text-[8px] font-bold tracking-widest uppercase -mt-1">find your next home</Text>
+            </View>
           </View>
-          <View
-            className="rounded-full px-2.5 py-1"
-            style={{ backgroundColor: `${STATUS_COLORS[listing.status] || "#64748b"}15` }}
-          >
-            <Text
-              className="text-xs font-bold uppercase"
-              style={{ color: STATUS_COLORS[listing.status] || "#64748b" }}
-            >
-              {listing.status}
-            </Text>
+          
+          <View className="flex-row items-center gap-4">
+            <TouchableOpacity className="relative">
+              <Feather name="bell" size={22} color="#0f172a" />
+              <View className="absolute top-0 right-0 w-2 h-2 bg-[#ef4444] border-2 border-white rounded-full" />
+            </TouchableOpacity>
+            <View className="bg-emerald-50 px-2 py-1 rounded-full flex-row items-center gap-1.5 border border-emerald-100">
+              <View className="w-1.5 h-1.5 bg-[#10b981] rounded-full" />
+              <Text className="text-[#10b981] text-[10px] font-black uppercase tracking-wider">Active</Text>
+            </View>
           </View>
         </View>
 
+        <View className="flex-row items-center gap-4 mb-6">
+          <View className="w-16 h-16 bg-slate-100 rounded-2xl overflow-hidden border border-slate-100">
+            <Image source={{ uri: listing.images[0] }} className="w-full h-full" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-base font-extrabold text-slate-900 mb-1" numberOfLines={1}>{listing.title}</Text>
+            <Text className="text-slate-500 text-sm font-medium">
+              <Text className="text-[#10b981] font-bold">{formatCurrency(listing.rent_monthly)}/mo</Text> · {listing.city}, {listing.state}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            className="bg-white border border-slate-200 rounded-xl px-4 py-2"
+            onPress={() => setActiveTab("edit")}
+          >
+            <View className="flex-row items-center gap-2">
+              <Feather name="edit-2" size={14} color="#10b981" />
+              <Text className="text-slate-700 text-xs font-bold">Edit Listing</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+
         {/* Tab Bar */}
-        <View className="flex-row gap-1 bg-slate-100 rounded-xl p-1">
+        <View className="flex-row justify-between">
           {(
             [
               { key: "overview", label: "Overview", icon: "bar-chart-2" },
               { key: "interests", label: "Interests", icon: "heart" },
-              { key: "edit", label: "Edit", icon: "edit-2" },
+              { key: "messages", label: "Messages", icon: "message-circle" },
+              { key: "edit", label: "Edit Listing", icon: "edit-3" },
             ] as const
           ).map((tab) => (
             <TouchableOpacity
               key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
-              className={`flex-1 flex-row items-center justify-center gap-1.5 py-2.5 rounded-lg ${
-                activeTab === tab.key ? "bg-white shadow-sm" : ""
-              }`}
+              onPress={() => setActiveTab(tab.key as any)}
+              className="pb-3 px-1 items-center"
             >
-              <Feather
-                name={tab.icon}
-                size={14}
-                color={activeTab === tab.key ? "#0ea5e9" : "#64748b"}
-              />
-              <Text
-                className={`text-sm font-medium ${
-                  activeTab === tab.key ? "text-primary-500" : "text-slate-500"
-                }`}
-              >
-                {tab.label}
-              </Text>
+              <View className="flex-row items-center gap-2 mb-1">
+                <Feather
+                  name={tab.icon as any}
+                  size={16}
+                  color={activeTab === tab.key ? "#10b981" : "#64748b"}
+                />
+                <Text
+                  className={`text-xs font-bold ${
+                    activeTab === tab.key ? "text-slate-900" : "text-slate-500"
+                  }`}
+                >
+                  {tab.label}
+                  {tab.key === "messages" && (
+                    <Text className="text-[#ef4444]"> 3</Text>
+                  )}
+                </Text>
+              </View>
+              {activeTab === tab.key && (
+                <View className="absolute bottom-0 w-full h-0.5 bg-[#10b981] rounded-full" />
+              )}
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      {/* Tab Content */}
-      {activeTab === "overview" && (
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        >
-          {metricsLoading ? (
-            <ActivityIndicator size="large" color="#0ea5e9" className="mt-10" />
-          ) : metrics ? (
-            <MetricsFunnel metrics={metrics} />
-          ) : (
-            <View className="items-center py-10">
-              <Feather name="bar-chart-2" size={48} color="#cbd5e1" />
-              <Text className="text-slate-400 mt-3">No metrics available yet</Text>
+      <ScrollView className="flex-1 bg-slate-50/50">
+        {activeTab === "overview" && (
+          <View className="p-5">
+            <View className="flex-row items-center justify-between mb-4">
+              <View>
+                <Text className="text-lg font-bold text-slate-900">Performance Overview</Text>
+                <Text className="text-slate-400 text-xs font-medium">Last 30 days</Text>
+              </View>
+              <TouchableOpacity className="bg-white border border-slate-100 rounded-xl px-3 py-1.5 flex-row items-center gap-2 shadow-sm">
+                <Feather name="calendar" size={14} color="#64748b" />
+                <Text className="text-slate-600 text-xs font-bold">Last 30 days</Text>
+                <Feather name="chevron-down" size={14} color="#64748b" />
+              </TouchableOpacity>
             </View>
-          )}
 
-          {/* Status Control Panel */}
-          <Card className="mt-4">
-            <Text className="font-bold text-slate-900 mb-3">Listing Controls</Text>
-            <View className="gap-2">
-              {listing.status !== "active" && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-3 bg-green-50 rounded-xl px-4 py-3"
-                  onPress={() => handleStatusChange("active")}
-                >
-                  <Feather name="play-circle" size={20} color="#22c55e" />
-                  <View className="flex-1">
-                    <Text className="font-medium text-green-700">Activate</Text>
-                    <Text className="text-xs text-green-600">Make visible in search results</Text>
+            {/* Metric Cards */}
+            <View className="flex-row flex-wrap gap-3 mb-6">
+              {[
+                { label: "Views", value: "95", icon: "eye", color: "#10b981", bg: "#ecfdf5" },
+                { label: "Interests", value: "2", icon: "heart", color: "#f43f5e", bg: "#fff1f2" },
+                { label: "Shortlisted", value: "0", icon: "bookmark", color: "#8b5cf6", bg: "#f5f3ff" },
+                { label: "Accepted", value: "2", icon: "check-circle", color: "#10b981", bg: "#ecfdf5" },
+              ].map((m, idx) => (
+                <View key={idx} style={{ width: "48%" }} className="bg-white border border-slate-50 rounded-[24px] p-5 shadow-sm">
+                  <View className="w-10 h-10 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: m.bg }}>
+                    <Feather name={m.icon as any} size={18} color={m.color} />
                   </View>
-                </TouchableOpacity>
-              )}
-              {listing.status === "active" && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-3 bg-amber-50 rounded-xl px-4 py-3"
-                  onPress={() => handleStatusChange("paused")}
-                >
-                  <Feather name="pause-circle" size={20} color="#f59e0b" />
-                  <View className="flex-1">
-                    <Text className="font-medium text-amber-700">Pause</Text>
-                    <Text className="text-xs text-amber-600">Temporarily hide from searches</Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              {listing.status !== "closed" && (
-                <TouchableOpacity
-                  className="flex-row items-center gap-3 bg-red-50 rounded-xl px-4 py-3"
-                  onPress={() => handleStatusChange("closed")}
-                >
-                  <Feather name="x-octagon" size={20} color="#ef4444" />
-                  <View className="flex-1">
-                    <Text className="font-medium text-red-700">Close</Text>
-                    <Text className="text-xs text-red-600">Permanently remove from all searches</Text>
-                  </View>
-                </TouchableOpacity>
+                  <Text className="text-2xl font-black text-slate-900">{m.value}</Text>
+                  <Text className="text-xs text-slate-400 font-bold uppercase tracking-wider">{m.label}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Conversion Funnel */}
+            <View className="bg-white border border-slate-50 rounded-[32px] p-6 mb-6 shadow-sm">
+              <Text className="text-lg font-bold text-slate-900 mb-6">Conversion Funnel</Text>
+              {metricsLoading ? (
+                <ActivityIndicator size="small" color="#10b981" />
+              ) : (
+                <MetricsFunnel metrics={metrics || { views: 95, interested: 2, shortlisted: 0, accepted: 2 }} />
               )}
             </View>
-          </Card>
-        </ScrollView>
-      )}
 
-      {activeTab === "interests" && (
-        <View className="flex-1">
-          {/* Interest Filter */}
-          <View className="bg-white px-4 py-2 border-b border-slate-100">
-            <FlatList
-              horizontal
-              data={INTEREST_FILTERS}
-              keyExtractor={(item) => item.key}
-              showsHorizontalScrollIndicator={false}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  onPress={() => setInterestFilter(item.key)}
-                  className={`rounded-full px-3 py-1.5 mr-2 ${
-                    interestFilter === item.key ? "bg-primary-500" : "bg-slate-100"
-                  }`}
-                >
-                  <Text
-                    className={`text-xs font-medium ${
-                      interestFilter === item.key ? "text-white" : "text-slate-600"
+            {/* Insights */}
+            <TouchableOpacity className="bg-[#059669] rounded-[24px] p-5 flex-row items-center gap-4 mb-6">
+              <View className="w-12 h-12 bg-white/20 rounded-2xl items-center justify-center">
+                <Feather name="zap" size={24} color="#fff" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-white font-bold text-sm">Insights for you</Text>
+                <Text className="text-white/80 text-[11px] font-medium leading-4 mt-1">
+                  • Your listing is getting good visibility.{"\n"}
+                  • Try adding more photos to increase interests.
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={20} color="#fff" />
+            </TouchableOpacity>
+
+            {/* Quick Actions & Snapshot */}
+            <View className="flex-row gap-4 mb-6">
+              <View className="flex-1 gap-4">
+                <Text className="text-base font-bold text-slate-900 ml-1">Quick Actions</Text>
+                <View className="flex-row flex-wrap gap-2">
+                  {[
+                    { label: "Edit Listing", icon: "edit-3", sub: "Update details" },
+                    { label: "Update Photos", icon: "camera", sub: "Add new photos" },
+                    { label: "View Insights", icon: "bar-chart-2", sub: "Detailed analytics" },
+                    { label: "Boost Listing", icon: "zap", sub: "Increase visibility" },
+                  ].map((a, idx) => (
+                    <TouchableOpacity key={idx} style={{ width: "48%" }} className="bg-white border border-slate-50 rounded-2xl p-3 shadow-sm">
+                      <Feather name={a.icon as any} size={16} color="#10b981" className="mb-2" />
+                      <Text className="text-[11px] font-bold text-slate-900">{a.label}</Text>
+                      <Text className="text-[9px] text-slate-400 font-medium">{a.sub}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View className="flex-1">
+                <Text className="text-base font-bold text-slate-900 ml-1 mb-4">Listing Snapshot</Text>
+                <View className="bg-white border border-slate-50 rounded-3xl p-4 shadow-sm gap-3">
+                  {[
+                    { label: "Rent", value: formatCurrency(listing.rent_monthly), icon: "home" },
+                    { label: "Deposit", value: formatCurrency(listing.security_deposit || 0), icon: "shield" },
+                    { label: "Available From", value: "May 1, 2026", icon: "calendar" },
+                  ].map((s, idx) => (
+                    <View key={idx} className="flex-row items-center justify-between">
+                      <View className="flex-row items-center gap-2">
+                        <Feather name={s.icon as any} size={12} color="#94a3b8" />
+                        <Text className="text-slate-400 text-[10px] font-bold">{s.label}</Text>
+                      </View>
+                      <Text className="text-slate-900 text-[10px] font-black">{s.value}</Text>
+                    </View>
+                  ))}
+                  <TouchableOpacity className="mt-2 items-center">
+                    <Text className="text-[#10b981] text-[10px] font-bold">View Full Details ›</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Listing Controls */}
+            <View className="flex-row gap-4 mb-10">
+              <TouchableOpacity 
+                className="flex-1 bg-amber-50 rounded-[24px] p-5 flex-row items-center justify-between border border-amber-100"
+                onPress={() => handleStatusChange("paused")}
+              >
+                <View className="flex-row items-center gap-3">
+                  <View className="w-10 h-10 bg-white rounded-2xl items-center justify-center">
+                    <Feather name="pause" size={20} color="#f59e0b" />
+                  </View>
+                  <View>
+                    <Text className="text-amber-700 font-bold text-sm">Pause Listing</Text>
+                    <Text className="text-amber-600/70 text-[10px] font-medium">Temporarily hide</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#f59e0b" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                className="flex-1 bg-red-50 rounded-[24px] p-5 flex-row items-center justify-between border border-red-100"
+                onPress={() => handleStatusChange("closed")}
+              >
+                <View className="flex-row items-center gap-3">
+                  <View className="w-10 h-10 bg-white rounded-2xl items-center justify-center">
+                    <Feather name="x" size={20} color="#ef4444" />
+                  </View>
+                  <View>
+                    <Text className="text-red-700 font-bold text-sm">Close Listing</Text>
+                    <Text className="text-red-600/70 text-[10px] font-medium">Permanently remove</Text>
+                  </View>
+                </View>
+                <Feather name="chevron-right" size={18} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {activeTab === "interests" && (
+          <View className="flex-1 bg-white">
+            {/* Interest Filter */}
+            <View className="px-5 py-4 border-b border-slate-50">
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {[
+                  { key: "all", label: "Active", count: 2 },
+                  { key: "new", label: "New", count: 1 },
+                  { key: "shortlisted", label: "Shortlisted", count: 0 },
+                  { key: "accepted", label: "Accepted", count: 1 },
+                  { key: "rejected", label: "Rejected", count: 0 },
+                ].map((f) => (
+                  <TouchableOpacity
+                    key={f.key}
+                    onPress={() => setInterestFilter(f.key)}
+                    className={`flex-row items-center gap-2 px-4 py-2 rounded-full mr-2 ${
+                      interestFilter === f.key ? "bg-[#10b981]" : "bg-slate-100"
                     }`}
                   >
-                    {item.label}
-                  </Text>
+                    <Text className={`text-xs font-bold ${interestFilter === f.key ? "text-white" : "text-slate-600"}`}>
+                      {f.label}
+                    </Text>
+                    <View className={`w-5 h-5 rounded-full items-center justify-center ${interestFilter === f.key ? "bg-white/20" : "bg-white"}`}>
+                      <Text className={`text-[10px] font-black ${interestFilter === f.key ? "text-white" : "text-slate-400"}`}>
+                        {f.count}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              <View className="flex-row items-center justify-end mt-4">
+                <TouchableOpacity className="flex-row items-center gap-1 bg-slate-50 rounded-lg px-3 py-1.5">
+                  <Text className="text-slate-500 text-[11px] font-bold">Sort by: Recently Active</Text>
+                  <Feather name="chevron-down" size={12} color="#94a3b8" />
                 </TouchableOpacity>
-              )}
-            />
-          </View>
-
-          {interestsLoading ? (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator size="large" color="#0ea5e9" />
+              </View>
             </View>
-          ) : (
-            <FlatList
-              data={interests || []}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <InterestCard
-                  interest={item}
-                  onDecide={handleDecision}
-                  isLoading={hostDecision.isPending}
-                />
-              )}
-              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-              onRefresh={refetchInterests}
-              refreshing={interestsRefetching}
-              ListEmptyComponent={
-                <View className="items-center justify-center py-20">
-                  <Feather name="inbox" size={48} color="#cbd5e1" />
-                  <Text className="text-slate-400 mt-4 text-base">
-                    {interestFilter === "all"
-                      ? "No active interests yet"
-                      : `No ${interestFilter} interests`}
-                  </Text>
-                  <Text className="text-slate-400 text-sm mt-1">
-                    Interests from seekers will appear here
-                  </Text>
+
+            {interestsLoading ? (
+              <ActivityIndicator size="large" color="#10b981" className="mt-10" />
+            ) : (
+              <View>
+                {(interests || []).map((item: any) => (
+                  <InterestCard
+                    key={item.id}
+                    interest={item}
+                    onDecide={handleDecision}
+                    isLoading={hostDecision.isPending}
+                  />
+                ))}
+                
+                {/* Footer Insight */}
+                <View className="p-5">
+                  <TouchableOpacity className="bg-emerald-50 rounded-[24px] p-5 flex-row items-center gap-4 border border-emerald-100">
+                    <View className="w-12 h-12 bg-[#10b981] rounded-2xl items-center justify-center">
+                      <Feather name="sparkles" size={24} color="#fff" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-emerald-800 font-bold text-sm">Improve your matches</Text>
+                      <Text className="text-emerald-700/70 text-[11px] font-medium leading-4 mt-1">
+                        Adding more photos and details can help you get more quality interests.
+                      </Text>
+                    </View>
+                    <TouchableOpacity className="bg-white border border-emerald-200 rounded-xl px-4 py-2">
+                      <Text className="text-emerald-700 text-xs font-bold">Update Listing</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
                 </View>
-              }
-            />
-          )}
-        </View>
-      )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {activeTab === "messages" && (
+          <View className="flex-1 items-center justify-center py-20 bg-white">
+            <Feather name="message-circle" size={48} color="#cbd5e1" />
+            <Text className="text-slate-400 mt-4 text-base font-bold">Message conversations</Text>
+            <Text className="text-slate-400 text-sm mt-1">Chat history with interested seekers</Text>
+          </View>
+        )}
 
       {activeTab === "edit" && (
         <KeyboardAvoidingView

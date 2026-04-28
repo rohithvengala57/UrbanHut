@@ -7,14 +7,14 @@ interface BadgeProps {
   size?: "sm" | "md";
 }
 
-export function Badge({ label, color = "#0ea5e9", size = "sm" }: BadgeProps) {
+export function Badge({ label, color = "#10b981", size = "sm" }: BadgeProps) {
   return (
     <View
-      className={`rounded-full ${size === "sm" ? "px-2 py-0.5" : "px-3 py-1"}`}
-      style={{ backgroundColor: `${color}20` }}
+      className={`rounded-full ${size === "sm" ? "px-2.5 py-1" : "px-4 py-1.5"} border border-emerald-100`}
+      style={{ backgroundColor: `${color}10` }}
     >
       <Text
-        className={`font-medium ${size === "sm" ? "text-xs" : "text-sm"}`}
+        className={`font-black uppercase tracking-widest ${size === "sm" ? "text-[10px]" : "text-[11px]"}`}
         style={{ color }}
       >
         {label}

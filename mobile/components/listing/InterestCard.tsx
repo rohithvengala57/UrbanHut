@@ -28,119 +28,65 @@ export function InterestCard({ interest, onDecide, isLoading }: InterestCardProp
   const badge = STATUS_BADGE[interest.status] || STATUS_BADGE.interested;
   const isActionable = interest.status === "interested" || interest.status === "shortlisted";
 
-  const handleDecision = (status: DecisionStatus) => {
-    if (status === "rejected") {
-      Alert.alert(
-        "Reject Interest",
-        `Are you sure you want to reject ${interest.applicant_name}?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Reject",
-            style: "destructive",
-            onPress: () => onDecide(interest.id, status),
-          },
-        ]
-      );
-    } else {
-      onDecide(interest.id, status);
-    }
-  };
-
   return (
-    <View className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 mb-3">
-      {/* Header */}
-      <View className="flex-row items-start gap-3 mb-3">
-        <Avatar name={interest.applicant_name} size={48} uri={interest.applicant_avatar} />
-        <View className="flex-1">
-          <View className="flex-row items-center justify-between">
-            <Text className="font-bold text-slate-900 text-base">
-              {interest.applicant_name}
-            </Text>
-            <View className="rounded-full px-2 py-0.5" style={{ backgroundColor: badge.bg }}>
-              <Text className="text-xs font-semibold" style={{ color: badge.color }}>
-                {badge.label}
-              </Text>
-            </View>
-          </View>
-
-          <View className="flex-row items-center gap-2 mt-0.5">
-            {interest.applicant_occupation && (
-              <Text className="text-xs text-slate-500">{interest.applicant_occupation}</Text>
-            )}
-            {interest.applicant_city && (
-              <View className="flex-row items-center gap-0.5">
-                <Feather name="map-pin" size={10} color="#94a3b8" />
-                <Text className="text-xs text-slate-400">{interest.applicant_city}</Text>
-              </View>
-            )}
-          </View>
-
-          <View className="flex-row items-center gap-3 mt-1">
-            <TrustBadge score={interest.applicant_trust_score} size="sm" />
-            {interest.compatibility_score && (
-              <View className="flex-row items-center gap-1">
-                <Feather name="zap" size={10} color="#f59e0b" />
-                <Text className="text-xs font-medium text-amber-600">
-                  {Math.round(interest.compatibility_score)}% match
-                </Text>
-              </View>
-            )}
-            <Text className="text-xs text-slate-400">
-              {formatRelativeDate(interest.created_at)}
-            </Text>
-          </View>
-        </View>
+    <TouchableOpacity 
+      className="bg-white px-5 py-4 border-b border-slate-50 flex-row items-center gap-4"
+      onPress={() => router.push(`/chat/${interest.id}` as any)}
+    >
+      <View className="relative">
+        <Image 
+          source={{ uri: interest.applicant_avatar || `https://i.pravatar.cc/150?u=${interest.applicant_id}` }} 
+          className="w-14 h-14 rounded-full"
+        />
+        {interest.status === "interested" && (
+          <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+        )}
       </View>
 
-      {/* Message */}
-      {interest.message && (
-        <View className="bg-slate-50 rounded-xl px-3 py-2 mb-3">
-          <Text className="text-sm text-slate-600 italic">"{interest.message}"</Text>
+      <View className="flex-1">
+        <View className="flex-row items-center gap-2 mb-0.5">
+          <Text className="text-base font-bold text-slate-900">{interest.applicant_name}</Text>
+          <View className="bg-primary-50 px-1.5 py-0.5 rounded">
+            <Text className="text-primary-600 text-[9px] font-black uppercase">New</Text>
+          </View>
         </View>
-      )}
 
-      {/* Actions */}
-      {isActionable && (
-        <View className="flex-row gap-2">
-          {interest.status === "interested" && (
-            <TouchableOpacity
-              className="flex-1 flex-row items-center justify-center gap-1.5 bg-violet-50 rounded-xl py-2.5"
-              onPress={() => handleDecision("shortlisted")}
-              disabled={isLoading}
-            >
-              <Feather name="bookmark" size={14} color="#8b5cf6" />
-              <Text className="text-sm font-semibold text-violet-600">Shortlist</Text>
-            </TouchableOpacity>
-          )}
+        <Text className="text-slate-500 text-xs font-medium mb-2">
+          {interest.applicant_occupation || "Applicant"} · {interest.applicant_city || "Jersey City, NJ"}
+        </Text>
 
-          <TouchableOpacity
-            className="flex-1 flex-row items-center justify-center gap-1.5 bg-green-50 rounded-xl py-2.5"
-            onPress={() => handleDecision("accepted")}
-            disabled={isLoading}
-          >
-            <Feather name="check-circle" size={14} color="#22c55e" />
-            <Text className="text-sm font-semibold text-green-600">Accept</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="flex-1 flex-row items-center justify-center gap-1.5 bg-red-50 rounded-xl py-2.5"
-            onPress={() => handleDecision("rejected")}
-            disabled={isLoading}
-          >
-            <Feather name="x-circle" size={14} color="#ef4444" />
-            <Text className="text-sm font-semibold text-red-500">Reject</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="flex-row items-center justify-center bg-slate-50 rounded-xl px-3 py-2.5"
-            onPress={() => handleDecision("archived")}
-            disabled={isLoading}
-          >
-            <Feather name="archive" size={14} color="#64748b" />
-          </TouchableOpacity>
+        <View className="flex-row items-center gap-3 mb-2">
+          <View className="w-5 h-5 bg-red-50 rounded-full items-center justify-center">
+            <Text className="text-[10px] font-bold text-red-500">15</Text>
+          </View>
+          <View className="flex-row items-center gap-1">
+            <Feather name="check-circle" size={12} color="#10b981" />
+            <Text className="text-[#10b981] text-[11px] font-bold">Verified</Text>
+          </View>
+          <View className="flex-row items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+            <Feather name="zap" size={10} color="#10b981" />
+            <Text className="text-emerald-700 text-[10px] font-bold">
+              {Math.round(interest.compatibility_score || 77)}% match
+            </Text>
+          </View>
+          <Text className="text-slate-400 text-[10px] font-medium">Active 10:24 AM</Text>
         </View>
-      )}
-    </View>
+
+        {interest.message && (
+          <Text className="text-slate-500 text-xs" numberOfLines={2}>
+            {interest.message}
+          </Text>
+        )}
+      </View>
+
+      <View className="flex-row items-center gap-2">
+        <View className={`px-2.5 py-1 rounded-full ${interest.status === 'accepted' ? 'bg-emerald-50' : 'bg-slate-100'}`}>
+          <Text className={`text-[10px] font-bold uppercase ${interest.status === 'accepted' ? 'text-emerald-600' : 'text-slate-500'}`}>
+            {badge.label}
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={18} color="#cbd5e1" />
+      </View>
+    </TouchableOpacity>
   );
 }
