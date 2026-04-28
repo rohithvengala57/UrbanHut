@@ -117,8 +117,7 @@ export default function MyListingsScreen() {
       {/* FAB */}
       <TouchableOpacity
         onPress={() => router.push("/listing/create")}
-        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-lg"
-        style={{ elevation: 8 }}
+        className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-elevated"
         activeOpacity={0.8}
       >
         <Feather name="plus" size={26} color="#fff" />

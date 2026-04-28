@@ -19,6 +19,7 @@ import { TrustBadge } from "@/components/trust/TrustBadge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useCreateRoom } from "@/hooks/useChat";
 import type { InterestDetail } from "@/hooks/useHostListings";
 import { useExpressInterest, useMyInterests } from "@/hooks/useListings";
@@ -237,11 +238,7 @@ function RecommendationsTab({
   onInterest: (listingId: string) => void;
 }) {
   if (isLoading && !isRefreshing) {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#0ea5e9" />
-      </View>
-    );
+    return <SkeletonLoader count={3} style={{ padding: 16 }} />;
   }
 
   if (isError) {
@@ -365,21 +362,17 @@ function RecommendationsTab({
                 onPress={() => onInterest(item.listing_id)}
                 disabled={sent || expressInterest.isPending}
                 className={`rounded-2xl px-4 py-2 flex-row items-center gap-1.5 ${
-                  sent ? "bg-slate-100" : "bg-primary-500"
+                  sent ? "bg-emerald-500" : "bg-primary-500"
                 }`}
                 activeOpacity={0.85}
               >
                 <Feather
-                  name={sent ? "check" : "heart"}
+                  name={sent ? "check-circle" : "heart"}
                   size={14}
-                  color={sent ? "#64748b" : "#fff"}
+                  color="#fff"
                 />
-                <Text
-                  className={`text-sm font-semibold ${
-                    sent ? "text-slate-500" : "text-white"
-                  }`}
-                >
-                  {sent ? "Sent" : "Interested"}
+                <Text className="text-sm font-semibold text-white">
+                  {sent ? "Sent!" : "Interested"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -459,27 +452,26 @@ function InboxTab({
       </ScrollView>
 
       {isLoading && !isRefreshing ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#0ea5e9" />
-        </View>
+        <SkeletonLoader count={3} style={{ padding: 16 }} />
       ) : isError ? (
-        <View className="flex-1 items-center justify-center px-8">
-          <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
-            <Feather name="wifi-off" size={28} color="#ef4444" />
-          </View>
-          <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load inbox</Text>
-          <Text className="text-slate-400 text-sm text-center mt-2">
-            Pull to refresh or retry.
-          </Text>
-          <TouchableOpacity
-            onPress={onRefresh}
-            className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
-          >
-            <Feather name="refresh-cw" size={16} color="#fff" />
-            <Text className="text-white font-semibold">Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
+  <View className="flex-1 items-center justify-center px-8">
+    <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+      <Feather name="wifi-off" size={28} color="#ef4444" />
+    </View>
+    <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load inbox</Text>
+    <Text className="text-slate-400 text-sm text-center mt-2">
+      Pull to refresh or retry.
+    </Text>
+    <TouchableOpacity
+      onPress={onRefresh}
+      className="mt-6 bg-primary-500 rounded-2xl px-8 py-3 flex-row items-center gap-2"
+    >
+      <Feather name="refresh-cw" size={16} color="#fff" />
+      <Text className="text-white font-semibold">Retry</Text>
+    </TouchableOpacity>
+  </View>
+) : (
+
         <FlatList
           data={interests || []}
           keyExtractor={(item) => item.id}
@@ -575,11 +567,7 @@ function ConnectionsTab({
   isChatLoading: boolean;
 }) {
   if (isLoading && !isRefreshing) {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <ActivityIndicator size="large" color="#0ea5e9" />
-      </View>
-    );
+    return <SkeletonLoader count={3} style={{ padding: 16 }} />;
   }
 
   if (isError) {

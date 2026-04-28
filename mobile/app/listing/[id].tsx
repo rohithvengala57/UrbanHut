@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/Card";
 import { useExpressInterest, useListing, useMyInterests } from "@/hooks/useListings";
 import { useSavedListings, useToggleSave } from "@/hooks/useSaved";
 import { formatCurrency } from "@/lib/format";
+import { trackEvent } from "@/lib/analytics";
 import { useAuthStore } from "@/stores/authStore";
 import api from "@/services/api";
 
@@ -160,6 +161,10 @@ export default function ListingDetailScreen() {
       await api.post("/matching/interest", {
         to_listing_id: id,
         message: questionText.trim(),
+      });
+      await trackEvent("interest_sent", {
+        listing_id: id,
+        has_message: true,
       });
       setQuestionModalVisible(false);
       setQuestionText("");

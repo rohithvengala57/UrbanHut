@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
@@ -58,8 +59,8 @@ class Listing(Base):
     current_occupants: Mapped[int] = mapped_column(Integer, default=0)
 
     # Amenities & rules
-    amenities: Mapped[dict] = mapped_column(JSONB, default=list)
-    house_rules: Mapped[dict] = mapped_column(JSONB, default=list)
+    amenities: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+    house_rules: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
 
     # Media
     images: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)

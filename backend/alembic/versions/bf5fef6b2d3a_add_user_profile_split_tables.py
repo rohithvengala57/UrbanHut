@@ -50,7 +50,7 @@ def upgrade() -> None:
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("current_city", sa.String(length=100), nullable=True),
         sa.Column("current_state", sa.String(length=50), nullable=True),
-        sa.Column("looking_in", postgresql.ARRAY(sa.String()), nullable=True),
+        sa.Column("looking_in", sa.JSON(), nullable=True),
         sa.Column("budget_min", sa.Integer(), nullable=True),
         sa.Column("budget_max", sa.Integer(), nullable=True),
         sa.Column("move_in_date", sa.Date(), nullable=True),

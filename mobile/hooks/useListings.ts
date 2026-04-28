@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 import type { ListingFilters } from "@/stores/uiStore";
 
@@ -80,6 +81,14 @@ export function useExpressInterest() {
       // Rollback to the previous value if mutation fails
       if (context?.previousInterests) {
         queryClient.setQueryData(["my-interests"], context.previousInterests);
+      }
+    },
+    onSuccess: async (_data, newInterest) => {
+      if (newInterest.to_listing_id) {
+        await trackEvent("interest_sent", {
+          listing_id: newInterest.to_listing_id,
+          has_message: Boolean(newInterest.message),
+        });
       }
     },
     onSettled: () => {

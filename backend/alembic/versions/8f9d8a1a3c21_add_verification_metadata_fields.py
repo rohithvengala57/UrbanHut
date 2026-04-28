@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.add_column("verifications", sa.Column("submitted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True))
     op.add_column("verifications", sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("verifications", sa.Column("review_notes", sa.Text(), nullable=True))
-    op.add_column("verifications", sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    op.add_column("verifications", sa.Column("metadata", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

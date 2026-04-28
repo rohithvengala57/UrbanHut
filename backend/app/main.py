@@ -25,6 +25,7 @@ from app.routers import (
     trust,
     users,
     verifications,
+    telemetry,
 )
 
 # ─── Structured logging setup ─────────────────────────────────────────────────
@@ -326,8 +327,9 @@ app.include_router(services.router, prefix="/api/v1/services", tags=["Services"]
 app.include_router(community.router, prefix="/api/v1/community", tags=["Community"])
 app.include_router(saved.router, prefix="/api/v1/saved", tags=["Saved"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+app.include_router(telemetry.router, prefix="/api/v1/telemetry", tags=["Telemetry"])
 
-log.info("routes_registered", router_count=13)
+log.info("routes_registered", router_count=14)
 
 
 # ─── Utility endpoints ────────────────────────────────────────────────────────

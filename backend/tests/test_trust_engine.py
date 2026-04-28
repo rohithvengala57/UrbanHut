@@ -195,8 +195,7 @@ class TestTotalScore:
             _make_event("verification", "email_verified", 4),
             _make_event("verification", "phone_verified", 4),
             _make_event("verification", "photo_id_verified", 5),
-            *[_make_event("financial", "bill_paid_ontime", 5) for _ in range(10)],
-        ]
+        ] + [_make_event("financial", "bill_paid_ontime", 5) for _ in range(10)]
         # Calculate manually — engine.calculate is async, test pillar math
         score = min(100.0, sum([
             engine._calc_verification(events),

@@ -1,9 +1,11 @@
 import io
 import time
 import uuid
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from PIL import Image, ImageOps
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -14,7 +16,16 @@ from app.models.match import MatchInterest
 from app.models.user import User
 from app.models.user_search_preferences import UserSearchPreferences
 from app.schemas.user import UserProfileUpdate, UserPublicResponse, UserResponse
+from app.services.analytics import track_backend_event
 from app.utils.s3 import avatar_key, upload_bytes
+
+
+class PushTokenUpdate(BaseModel):
+    push_token: str | None = None
+
+
+class NotificationPrefsUpdate(BaseModel):
+    prefs: dict[str, Any]
 
 router = APIRouter()
 
@@ -38,10 +49,40 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
 ):
     update_data = data.model_dump(exclude_unset=True)
+    was_profile_completed = bool(
+        current_user.onboarding_metadata
+        and "steps" in current_user.onboarding_metadata
+        and current_user.onboarding_metadata["steps"].get("profile_completed")
+    )
     for field, value in update_data.items():
         setattr(current_user, field, value)
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        # Define profile completion as having at least bio, occupation and phone
+        if current_user.bio and current_user.occupation and current_user.phone:
+            if not current_user.onboarding_metadata["steps"].get("profile_completed"):
+                current_user.onboarding_metadata["steps"]["profile_completed"] = True
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(current_user, "onboarding_metadata")
+
     db.add(current_user)
     await db.flush()
+
+    now_profile_completed = bool(
+        current_user.onboarding_metadata
+        and "steps" in current_user.onboarding_metadata
+        and current_user.onboarding_metadata["steps"].get("profile_completed")
+    )
+    if now_profile_completed and not was_profile_completed:
+        await track_backend_event(
+            db,
+            event_name="profile_completed",
+            user_id=current_user.id,
+            source="backend",
+            properties={"completed_via": "users.patch_me"},
+        )
+
     result = await db.execute(
         select(User).options(selectinload(User.verifications)).where(User.id == current_user.id)
     )
@@ -102,6 +143,42 @@ async def upload_avatar(
     db.add(current_user)
     await db.flush()
     return {"avatar_key": key}
+
+
+@router.put("/me/push-token", status_code=status.HTTP_204_NO_CONTENT)
+async def update_push_token(
+    body: PushTokenUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register or clear the Expo push token for the current user."""
+    current_user.push_token = body.push_token
+    db.add(current_user)
+    await db.flush()
+
+
+@router.get("/me/notification-preferences")
+async def get_notification_prefs(
+    current_user: User = Depends(get_current_user),
+):
+    from app.services.notification_service import DEFAULT_PREFS
+    prefs = current_user.notification_prefs or DEFAULT_PREFS
+    return {"prefs": prefs}
+
+
+@router.put("/me/notification-preferences")
+async def update_notification_prefs(
+    body: NotificationPrefsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist per-user notification preferences."""
+    from app.services.notification_service import DEFAULT_PREFS
+    merged = {**DEFAULT_PREFS, **body.prefs}
+    current_user.notification_prefs = merged
+    db.add(current_user)
+    await db.flush()
+    return {"prefs": merged}
 
 
 @router.get("/seeking-count")
