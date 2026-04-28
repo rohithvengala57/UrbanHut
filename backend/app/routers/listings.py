@@ -699,13 +699,13 @@ async def host_decide_interest(
     previous_status = interest.status
     interest.status = new_status
 
-    # If accepted, check for mutual interest (seeker also interested in host)
+    # If accepted, mark as mutual only when host has an explicit reciprocal interest.
     if new_status == "accepted":
         mutual_check = await db.execute(
             select(MatchInterest).where(
                 and_(
-                    MatchInterest.from_user_id == interest.from_user_id,
-                    MatchInterest.to_listing_id == listing_id,
+                    MatchInterest.from_user_id == current_user.id,
+                    MatchInterest.to_user_id == interest.from_user_id,
                     MatchInterest.status.in_(["interested", "shortlisted", "accepted"]),
                 )
             )

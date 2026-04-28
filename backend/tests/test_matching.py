@@ -228,5 +228,47 @@ class TestMatching:
             "status": "accepted"
         }, headers=host_headers)
         assert resp.status_code == 200
-        # If the seeker is already interested, it should become mutual
+        # No reciprocal host->seeker interest exists yet, so this remains accepted
+        assert resp.json()["status"] == "accepted"
+
+    async def test_host_accept_sets_mutual_when_reciprocal_interest_exists(self, client):
+        seeker_token = await get_token(client, email="seeker_recip@test.com")
+        seeker_headers = {"Authorization": f"Bearer {seeker_token}"}
+
+        host_token = await get_token(client, email="host_recip@test.com")
+        host_headers = {"Authorization": f"Bearer {host_token}"}
+
+        create_resp = await client.post("/api/v1/listings/", json={
+            "title": "Reciprocal Room",
+            "description": "Room used to validate reciprocal interest mutual transitions.",
+            "property_type": "apartment",
+            "room_type": "private_room",
+            "address_line1": "777 Reciprocal St",
+            "city": "San Francisco",
+            "state": "CA",
+            "zip_code": "94105",
+            "rent_monthly": 2100,
+            "total_bedrooms": 2,
+            "total_bathrooms": 1,
+            "available_from": "2026-05-01"
+        }, headers=host_headers)
+        listing_id = create_resp.json()["id"]
+
+        # Seeker expresses listing interest to host-owned listing
+        interest_resp = await client.post("/api/v1/matching/interest", json={
+            "to_listing_id": listing_id
+        }, headers=seeker_headers)
+        interest_id = interest_resp.json()["id"]
+
+        # Host creates explicit reciprocal direct interest to seeker
+        reciprocal_resp = await client.post("/api/v1/matching/interest", json={
+            "to_user_id": interest_resp.json()["from_user_id"]
+        }, headers=host_headers)
+        assert reciprocal_resp.status_code == 201
+
+        # Accepting now should upgrade to mutual
+        resp = await client.patch(f"/api/v1/listings/{listing_id}/interests/{interest_id}", json={
+            "status": "accepted"
+        }, headers=host_headers)
+        assert resp.status_code == 200
         assert resp.json()["status"] == "mutual"

@@ -1,9 +1,7 @@
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Alert, Text, TouchableOpacity, View } from "react-native";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 
-import { TrustBadge } from "@/components/trust/TrustBadge";
-import { Avatar } from "@/components/ui/Avatar";
 import type { InterestDetail } from "@/hooks/useHostListings";
 import { formatRelativeDate } from "@/lib/format";
 
@@ -29,64 +27,91 @@ export function InterestCard({ interest, onDecide, isLoading }: InterestCardProp
   const isActionable = interest.status === "interested" || interest.status === "shortlisted";
 
   return (
-    <TouchableOpacity 
-      className="bg-white px-5 py-4 border-b border-slate-50 flex-row items-center gap-4"
-      onPress={() => router.push(`/chat/${interest.id}` as any)}
-    >
-      <View className="relative">
-        <Image 
-          source={{ uri: interest.applicant_avatar || `https://i.pravatar.cc/150?u=${interest.applicant_id}` }} 
-          className="w-14 h-14 rounded-full"
-        />
-        {interest.status === "interested" && (
-          <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
-        )}
-      </View>
-
-      <View className="flex-1">
-        <View className="flex-row items-center gap-2 mb-0.5">
-          <Text className="text-base font-bold text-slate-900">{interest.applicant_name}</Text>
-          <View className="bg-primary-50 px-1.5 py-0.5 rounded">
-            <Text className="text-primary-600 text-[9px] font-black uppercase">New</Text>
-          </View>
+    <View className="bg-white border-b border-slate-50">
+      <View className="px-5 py-4 flex-row items-center gap-4">
+        <View className="relative">
+          <Image 
+            source={{ uri: interest.applicant_avatar || `https://i.pravatar.cc/150?u=${interest.from_user_id}` }} 
+            className="w-14 h-14 rounded-full"
+          />
+          {interest.status === "interested" && (
+            <View className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" />
+          )}
         </View>
 
-        <Text className="text-slate-500 text-xs font-medium mb-2">
-          {interest.applicant_occupation || "Applicant"} · {interest.applicant_city || "Jersey City, NJ"}
-        </Text>
+        <View className="flex-1">
+          <View className="flex-row items-center gap-2 mb-0.5">
+            <Text className="text-base font-bold text-slate-900">{interest.applicant_name}</Text>
+            {interest.status === "interested" && (
+              <View className="bg-primary-50 px-1.5 py-0.5 rounded">
+                <Text className="text-primary-600 text-[9px] font-black uppercase">New</Text>
+              </View>
+            )}
+          </View>
 
-        <View className="flex-row items-center gap-3 mb-2">
-          <View className="w-5 h-5 bg-red-50 rounded-full items-center justify-center">
-            <Text className="text-[10px] font-bold text-red-500">15</Text>
+          <Text className="text-slate-500 text-xs font-medium mb-2">
+            {interest.applicant_occupation || "Applicant"} · {interest.applicant_city || "Jersey City, NJ"}
+          </Text>
+
+          <View className="flex-row items-center gap-3 mb-2">
+            <View className="flex-row items-center gap-1">
+              <MaterialCommunityIcons name="shield-check" size={12} color="#10b981" />
+              <Text className="text-[#10b981] text-[11px] font-bold">{Math.round(interest.applicant_trust_score || 85)}</Text>
+            </View>
+            <View className="flex-row items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded-full">
+              <Feather name="zap" size={10} color="#10b981" />
+              <Text className="text-emerald-700 text-[10px] font-bold">
+                {Math.round(interest.compatibility_score || 77)}% match
+              </Text>
+            </View>
+            <Text className="text-slate-400 text-[10px] font-medium">Active {formatRelativeDate(interest.created_at)}</Text>
           </View>
-          <View className="flex-row items-center gap-1">
-            <Feather name="check-circle" size={12} color="#10b981" />
-            <Text className="text-[#10b981] text-[11px] font-bold">Verified</Text>
-          </View>
-          <View className="flex-row items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-            <Feather name="zap" size={10} color="#10b981" />
-            <Text className="text-emerald-700 text-[10px] font-bold">
-              {Math.round(interest.compatibility_score || 77)}% match
+
+          {interest.message && (
+            <Text className="text-slate-500 text-xs italic" numberOfLines={2}>
+              "{interest.message}"
+            </Text>
+          )}
+        </View>
+
+        <View className="flex-row items-center gap-2">
+          <View className={`px-2.5 py-1 rounded-full ${interest.status === 'accepted' || interest.status === 'mutual' ? 'bg-emerald-50' : 'bg-slate-100'}`}>
+            <Text className={`text-[10px] font-bold uppercase ${interest.status === 'accepted' || interest.status === 'mutual' ? 'text-emerald-600' : 'text-slate-500'}`}>
+              {badge.label}
             </Text>
           </View>
-          <Text className="text-slate-400 text-[10px] font-medium">Active 10:24 AM</Text>
+          <Feather name="chevron-right" size={18} color="#cbd5e1" />
         </View>
-
-        {interest.message && (
-          <Text className="text-slate-500 text-xs" numberOfLines={2}>
-            {interest.message}
-          </Text>
-        )}
       </View>
 
-      <View className="flex-row items-center gap-2">
-        <View className={`px-2.5 py-1 rounded-full ${interest.status === 'accepted' ? 'bg-emerald-50' : 'bg-slate-100'}`}>
-          <Text className={`text-[10px] font-bold uppercase ${interest.status === 'accepted' ? 'text-emerald-600' : 'text-slate-500'}`}>
-            {badge.label}
-          </Text>
+      {isActionable && (
+        <View className="flex-row gap-2 px-5 pb-4">
+          {interest.status === "interested" && (
+            <TouchableOpacity 
+              onPress={() => onDecide(interest.id, "shortlisted")}
+              disabled={isLoading}
+              className="flex-1 bg-slate-50 border border-slate-200 py-2.5 rounded-xl items-center"
+            >
+              <Text className="text-slate-700 text-xs font-bold">Shortlist</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity 
+            onPress={() => onDecide(interest.id, "accepted")}
+            disabled={isLoading}
+            className="flex-[1.5] bg-[#10b981] py-2.5 rounded-xl items-center flex-row justify-center gap-2"
+          >
+            <Feather name="check" size={14} color="#fff" />
+            <Text className="text-white text-xs font-bold">Accept Interest</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => onDecide(interest.id, "rejected")}
+            disabled={isLoading}
+            className="w-10 h-10 bg-red-50 rounded-xl items-center justify-center border border-red-100"
+          >
+            <Feather name="x" size={16} color="#ef4444" />
+          </TouchableOpacity>
         </View>
-        <Feather name="chevron-right" size={18} color="#cbd5e1" />
-      </View>
-    </TouchableOpacity>
+      )}
+    </View>
   );
 }

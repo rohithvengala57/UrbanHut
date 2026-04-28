@@ -308,7 +308,7 @@ export default function ListingDetailScreen() {
 
               {/* Dots */}
               <View className="absolute bottom-6 left-0 right-0 flex-row justify-center gap-1.5">
-                {listing.images.map((_, i) => (
+                {listing.images.map((_: any, i: number) => (
                   <View key={i} className={`h-2 w-2 rounded-full ${i === carouselIndex ? "bg-white w-4" : "bg-white/60"}`} />
                 ))}
               </View>
@@ -404,6 +404,21 @@ export default function ListingDetailScreen() {
                     <MaterialCommunityIcons name={item.icon as any} size={24} color="#10b981" />
                   </View>
                   <Text className="text-slate-600 text-xs font-semibold">{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* Highlights */}
+          <View className="mb-8 bg-slate-50/50 rounded-[32px] p-6 border border-slate-100">
+            <Text className="text-xl font-bold text-[#065f46] mb-4">Highlights</Text>
+            <View className="flex-row flex-wrap gap-y-4">
+              {highlights.map((h, idx) => (
+                <View key={idx} style={{ width: "50%" }} className="flex-row items-center gap-2">
+                  <View className="w-5 h-5 bg-emerald-100 rounded-full items-center justify-center">
+                    <Feather name="check" size={12} color="#10b981" />
+                  </View>
+                  <Text className="text-slate-600 text-xs font-medium flex-1" numberOfLines={1}>{h}</Text>
                 </View>
               ))}
             </View>

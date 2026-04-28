@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,9 +15,10 @@ import {
 
 import { InterestCard } from "@/components/listing/InterestCard";
 import { MetricsFunnel } from "@/components/listing/MetricsFunnel";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { useChatRooms } from "@/hooks/useChat";
 import {
   useHostDecision,
   useListingInterests,
@@ -26,18 +27,9 @@ import {
   useUpdateListingStatus,
 } from "@/hooks/useHostListings";
 import { useListing } from "@/hooks/useListings";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatRelativeDate } from "@/lib/format";
 
-type ManageTab = "overview" | "interests" | "edit";
-
-const INTEREST_FILTERS = [
-  { key: "all", label: "Active" },
-  { key: "new", label: "New" },
-  { key: "shortlisted", label: "Shortlisted" },
-  { key: "accepted", label: "Accepted" },
-  { key: "rejected", label: "Rejected" },
-  { key: "archived", label: "Archived" },
-];
+type ManageTab = "overview" | "interests" | "messages" | "edit";
 
 function parseCsvList(value: string) {
   return value
@@ -56,9 +48,22 @@ export default function ManageListingScreen() {
   const {
     data: interests,
     isLoading: interestsLoading,
-    refetch: refetchInterests,
-    isRefetching: interestsRefetching,
   } = useListingInterests(id, interestFilter);
+  const { data: allInterests, isLoading: allInterestsLoading } = useListingInterests(id, "all");
+
+  const { data: allChatRooms, isLoading: chatRoomsLoading } = useChatRooms();
+  const listingChatRooms = allChatRooms?.filter(r => r.listing_id === id) || [];
+  const unreadCount = listingChatRooms.reduce((acc, r) => acc + r.unread_count, 0);
+  const interestByApplicantName = new Map((allInterests || []).map((i) => [i.applicant_name, i]));
+  const interestCounts = (allInterests || []).reduce<Record<string, number>>(
+    (acc, item) => {
+      const normalizedStatus = item.status === "interested" ? "new" : item.status;
+      acc.all += 1;
+      acc[normalizedStatus] = (acc[normalizedStatus] || 0) + 1;
+      return acc;
+    },
+    { all: 0, new: 0, shortlisted: 0, accepted: 0, rejected: 0, archived: 0 }
+  );
 
   const hostDecision = useHostDecision(id);
   const updateStatus = useUpdateListingStatus();
@@ -189,6 +194,13 @@ export default function ManageListingScreen() {
     <View className="flex-1 bg-white">
       {/* Header */}
       <View className="bg-white px-5 pt-6 pb-2">
+        <View className="flex-row items-center gap-4 mb-5">
+          <TouchableOpacity onPress={() => router.back()}>
+            <Feather name="arrow-left" size={28} color="#0f172a" />
+          </TouchableOpacity>
+          <Text className="text-[40px] font-extrabold text-slate-900 tracking-tight">Manage Listing</Text>
+        </View>
+
         <View className="flex-row items-center justify-between mb-6">
           <View className="flex-row items-center gap-2">
             <View className="w-8 h-8 bg-[#10b981] rounded-lg items-center justify-center">
@@ -260,8 +272,8 @@ export default function ManageListingScreen() {
                   }`}
                 >
                   {tab.label}
-                  {tab.key === "messages" && (
-                    <Text className="text-[#ef4444]"> 3</Text>
+                  {tab.key === "messages" && unreadCount > 0 && (
+                    <Text className="text-[#ef4444]"> {unreadCount}</Text>
                   )}
                 </Text>
               </View>
@@ -291,10 +303,10 @@ export default function ManageListingScreen() {
             {/* Metric Cards */}
             <View className="flex-row flex-wrap gap-3 mb-6">
               {[
-                { label: "Views", value: "95", icon: "eye", color: "#10b981", bg: "#ecfdf5" },
-                { label: "Interests", value: "2", icon: "heart", color: "#f43f5e", bg: "#fff1f2" },
-                { label: "Shortlisted", value: "0", icon: "bookmark", color: "#8b5cf6", bg: "#f5f3ff" },
-                { label: "Accepted", value: "2", icon: "check-circle", color: "#10b981", bg: "#ecfdf5" },
+                { label: "Views", value: String(metrics?.view_count || 0), icon: "eye", color: "#10b981", bg: "#ecfdf5" },
+                { label: "Interests", value: String(metrics?.interest_count || 0), icon: "heart", color: "#f43f5e", bg: "#fff1f2" },
+                { label: "Shortlisted", value: String(metrics?.shortlist_count || 0), icon: "bookmark", color: "#8b5cf6", bg: "#f5f3ff" },
+                { label: "Accepted", value: String(metrics?.accept_count || 0), icon: "check-circle", color: "#10b981", bg: "#ecfdf5" },
               ].map((m, idx) => (
                 <View key={idx} style={{ width: "48%" }} className="bg-white border border-slate-50 rounded-[24px] p-5 shadow-sm">
                   <View className="w-10 h-10 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: m.bg }}>
@@ -312,7 +324,16 @@ export default function ManageListingScreen() {
               {metricsLoading ? (
                 <ActivityIndicator size="small" color="#10b981" />
               ) : (
-                <MetricsFunnel metrics={metrics || { views: 95, interested: 2, shortlisted: 0, accepted: 2 }} />
+                <MetricsFunnel metrics={metrics || { 
+                  listing_id: id as string,
+                  view_count: 0, 
+                  interest_count: 0, 
+                  shortlist_count: 0, 
+                  accept_count: 0,
+                  reject_count: 0,
+                  archive_count: 0,
+                  funnel: []
+                }} />
               )}
             </View>
 
@@ -356,7 +377,7 @@ export default function ManageListingScreen() {
                   {[
                     { label: "Rent", value: formatCurrency(listing.rent_monthly), icon: "home" },
                     { label: "Deposit", value: formatCurrency(listing.security_deposit || 0), icon: "shield" },
-                    { label: "Available From", value: "May 1, 2026", icon: "calendar" },
+                    { label: "Available From", value: listing.available_from || "TBD", icon: "calendar" },
                   ].map((s, idx) => (
                     <View key={idx} className="flex-row items-center justify-between">
                       <View className="flex-row items-center gap-2">
@@ -415,11 +436,11 @@ export default function ManageListingScreen() {
             <View className="px-5 py-4 border-b border-slate-50">
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {[
-                  { key: "all", label: "Active", count: 2 },
-                  { key: "new", label: "New", count: 1 },
-                  { key: "shortlisted", label: "Shortlisted", count: 0 },
-                  { key: "accepted", label: "Accepted", count: 1 },
-                  { key: "rejected", label: "Rejected", count: 0 },
+                  { key: "all", label: "Active" },
+                  { key: "new", label: "New" },
+                  { key: "shortlisted", label: "Shortlisted" },
+                  { key: "accepted", label: "Accepted" },
+                  { key: "rejected", label: "Rejected" },
                 ].map((f) => (
                   <TouchableOpacity
                     key={f.key}
@@ -433,7 +454,7 @@ export default function ManageListingScreen() {
                     </Text>
                     <View className={`w-5 h-5 rounded-full items-center justify-center ${interestFilter === f.key ? "bg-white/20" : "bg-white"}`}>
                       <Text className={`text-[10px] font-black ${interestFilter === f.key ? "text-white" : "text-slate-400"}`}>
-                        {f.count}
+                        {allInterestsLoading ? "…" : interestCounts[f.key] || 0}
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -450,7 +471,7 @@ export default function ManageListingScreen() {
 
             {interestsLoading ? (
               <ActivityIndicator size="large" color="#10b981" className="mt-10" />
-            ) : (
+            ) : (interests || []).length > 0 ? (
               <View>
                 {(interests || []).map((item: any) => (
                   <InterestCard
@@ -465,7 +486,7 @@ export default function ManageListingScreen() {
                 <View className="p-5">
                   <TouchableOpacity className="bg-emerald-50 rounded-[24px] p-5 flex-row items-center gap-4 border border-emerald-100">
                     <View className="w-12 h-12 bg-[#10b981] rounded-2xl items-center justify-center">
-                      <Feather name="sparkles" size={24} color="#fff" />
+                      <Feather name="zap" size={24} color="#fff" />
                     </View>
                     <View className="flex-1">
                       <Text className="text-emerald-800 font-bold text-sm">Improve your matches</Text>
@@ -479,17 +500,130 @@ export default function ManageListingScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+            ) : (
+              <View className="py-20 px-8 items-center">
+                <View className="w-16 h-16 bg-slate-100 rounded-full items-center justify-center mb-4">
+                  <Feather name="users" size={30} color="#cbd5e1" />
+                </View>
+                <Text className="text-base font-bold text-slate-800">No interests found</Text>
+                <Text className="text-sm text-slate-400 text-center mt-1">
+                  No applicants match this filter right now.
+                </Text>
+              </View>
             )}
           </View>
         )}
 
         {activeTab === "messages" && (
-          <View className="flex-1 items-center justify-center py-20 bg-white">
-            <Feather name="message-circle" size={48} color="#cbd5e1" />
-            <Text className="text-slate-400 mt-4 text-base font-bold">Message conversations</Text>
-            <Text className="text-slate-400 text-sm mt-1">Chat history with interested seekers</Text>
+          <View className="flex-1 bg-white">
+            {chatRoomsLoading ? (
+              <View className="py-16 items-center">
+                <ActivityIndicator size="large" color="#10b981" />
+              </View>
+            ) : listingChatRooms.length > 0 ? (
+              <View>
+                <View className="px-5 py-4 border-b border-slate-100 flex-row items-center justify-between">
+                  <View>
+                    <View className="flex-row items-center gap-2">
+                      <Text className="text-2xl font-bold text-slate-900">Messages</Text>
+                      {unreadCount > 0 && (
+                        <View className="w-8 h-8 rounded-full bg-red-500 items-center justify-center">
+                          <Text className="text-white font-bold">{unreadCount}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text className="text-slate-500 text-sm">All conversations from interested users</Text>
+                  </View>
+                  <TouchableOpacity className="flex-row items-center gap-2 px-4 py-3 rounded-2xl border border-slate-200">
+                    <Text className="text-slate-800 text-sm font-bold">All Messages</Text>
+                    <Feather name="chevron-down" size={16} color="#0f172a" />
+                  </TouchableOpacity>
+                </View>
+                {listingChatRooms.map((room) => (
+                  <TouchableOpacity
+                    key={room.id}
+                    onPress={() => router.push(`/chat/${room.id}` as any)}
+                    className="px-5 py-5 border-b border-slate-100 flex-row items-start"
+                  >
+                    <View className="relative">
+                      <Avatar
+                        uri={room.other_user_avatar}
+                        name={room.other_user_name}
+                        size={56}
+                      />
+                      {room.unread_count > 0 && (
+                        <View className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white" />
+                      )}
+                    </View>
+                    <View className="flex-1 ml-4">
+                      <View className="flex-row items-start justify-between">
+                        <View className="flex-1 pr-2">
+                          <View className="flex-row items-center gap-2 mb-1">
+                            <Text className="text-base font-bold text-slate-900">{room.other_user_name}</Text>
+                            {room.unread_count > 0 && (
+                              <View className="bg-blue-100 rounded-lg px-2 py-1">
+                                <Text className="text-blue-600 text-xs font-bold uppercase">New</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View className="flex-row items-center gap-2 mb-2">
+                            <Text className="text-slate-600 text-sm">
+                              {interestByApplicantName.get(room.other_user_name)?.applicant_occupation || "Renter"} · {interestByApplicantName.get(room.other_user_name)?.applicant_city || "Jersey City, NJ"}
+                            </Text>
+                            <View className="bg-rose-50 rounded-xl px-3 py-1">
+                              <Text className="text-rose-500 text-sm font-semibold">
+                                {Math.round(interestByApplicantName.get(room.other_user_name)?.compatibility_score || 70)}% match
+                              </Text>
+                            </View>
+                          </View>
+                          <Text className="text-slate-600 text-[15px] leading-7" numberOfLines={2}>
+                            {room.last_message || "No messages yet"}
+                          </Text>
+                        </View>
+                        <View className="items-end gap-4">
+                          <Text className="text-slate-500 text-sm font-medium">
+                            {room.last_message_at ? formatRelativeDate(room.last_message_at) : ""}
+                          </Text>
+                          <View className={`rounded-full px-4 py-2 ${room.unread_count > 0 ? "bg-emerald-50" : "bg-slate-100"}`}>
+                            <Text className={`text-sm font-medium ${room.unread_count > 0 ? "text-emerald-700" : "text-slate-500"}`}>
+                              {room.unread_count > 0 ? "New" : room.status === "active" ? "Active" : "Inactive"}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                    <Feather name="chevron-right" size={32} color="#64748b" />
+                  </TouchableOpacity>
+                ))}
+                <View className="p-5">
+                  <TouchableOpacity className="bg-emerald-50 rounded-[24px] p-5 flex-row items-center gap-4 border border-emerald-100">
+                    <View className="w-12 h-12 border-4 border-emerald-200 rounded-full items-center justify-center">
+                      <Feather name="message-circle" size={22} color="#15803d" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-emerald-800 font-bold text-sm">Tip: Respond faster to get more acceptances</Text>
+                      <Text className="text-emerald-700/80 text-[11px] font-medium leading-4 mt-1">
+                        Listings with quick responses get 2x more conversions.
+                      </Text>
+                    </View>
+                    <Feather name="chevron-right" size={22} color="#15803d" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View className="flex-1 items-center justify-center py-20 bg-white">
+                <View className="w-16 h-16 bg-slate-50 rounded-full items-center justify-center mb-4">
+                  <Feather name="message-circle" size={32} color="#cbd5e1" />
+                </View>
+                <Text className="text-slate-800 font-bold text-base">No messages yet</Text>
+                <Text className="text-slate-400 text-sm mt-1 text-center px-10">
+                  Conversations with accepted interests will appear here.
+                </Text>
+              </View>
+            )}
           </View>
         )}
+      </ScrollView>
 
       {activeTab === "edit" && (
         <KeyboardAvoidingView

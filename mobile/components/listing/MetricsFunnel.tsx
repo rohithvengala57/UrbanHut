@@ -4,8 +4,6 @@ import { Text, View } from "react-native";
 
 import type { ListingMetrics } from "@/hooks/useHostListings";
 
-const FUNNEL_COLORS = ["#0ea5e9", "#8b5cf6", "#f59e0b", "#22c55e"];
-
 interface MetricsFunnelProps {
   metrics: ListingMetrics;
 }
@@ -44,34 +42,6 @@ export function MetricsFunnel({ metrics }: MetricsFunnelProps) {
           )}
         </View>
       ))}
-    </View>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  color,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <View
-      className="rounded-xl px-3 py-3 items-center"
-      style={{ backgroundColor: `${color}10`, width: "48%" }}
-    >
-      <View
-        className="w-8 h-8 rounded-lg items-center justify-center mb-1"
-        style={{ backgroundColor: `${color}20` }}
-      >
-        <Feather name={icon} size={16} color={color} />
-      </View>
-      <Text className="text-xl font-bold text-slate-900">{value}</Text>
-      <Text className="text-xs text-slate-500">{label}</Text>
     </View>
   );
 }

@@ -60,18 +60,27 @@ async def get_chat_rooms(
     users_result = await db.execute(select(User).where(User.id.in_(other_user_ids)))
     users_map = {u.id: u for u in users_result.scalars().all()}
 
-    # Batch-fetch last message per room using a correlated subquery approach
-    last_msgs: dict[uuid.UUID, ChatMessage] = {}
-    for rid in room_ids:
-        msg_result = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.room_id == rid)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(1)
+    # Batch-fetch last message per room in one query (avoid N+1 room loop)
+    last_message_at_subq = (
+        select(
+            ChatMessage.room_id.label("room_id"),
+            func.max(ChatMessage.created_at).label("max_created_at"),
         )
-        msg = msg_result.scalar_one_or_none()
-        if msg:
-            last_msgs[rid] = msg
+        .where(ChatMessage.room_id.in_(room_ids))
+        .group_by(ChatMessage.room_id)
+        .subquery()
+    )
+    last_msg_rows = await db.execute(
+        select(ChatMessage)
+        .join(
+            last_message_at_subq,
+            and_(
+                ChatMessage.room_id == last_message_at_subq.c.room_id,
+                ChatMessage.created_at == last_message_at_subq.c.max_created_at,
+            ),
+        )
+    )
+    last_msgs = {msg.room_id: msg for msg in last_msg_rows.scalars().all()}
 
     # Batch-fetch unread counts
     unread_result = await db.execute(

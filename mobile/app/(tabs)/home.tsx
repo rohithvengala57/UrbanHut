@@ -294,11 +294,11 @@ export default function HomeScreen() {
 
         {/* List Header Info */}
         <View className="flex-row items-center justify-between mt-5">
-          <Text className="text-slate-900 text-lg font-bold">
+          <Text className="text-slate-500 text-base font-medium">
             {(listings || []).length} listings found
           </Text>
-          <TouchableOpacity className="flex-row items-center gap-1 bg-slate-100 rounded-xl px-3 py-1.5">
-            <Text className="text-slate-600 text-sm font-semibold">Sort: Recommended</Text>
+          <TouchableOpacity className="flex-row items-center gap-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5">
+            <Text className="text-slate-600 text-xs font-bold uppercase tracking-wider">Sort: Recommended</Text>
             <Feather name="chevron-down" size={14} color="#64748b" />
           </TouchableOpacity>
         </View>
