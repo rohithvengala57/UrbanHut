@@ -18,6 +18,7 @@ import { ExpensesTab } from "@/components/household/ExpensesTab";
 import { Avatar } from "@/components/ui/Avatar";
 import { ActionTile } from "@/components/ui/ActionTile";
 import { Button } from "@/components/ui/Button";
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { Card } from "@/components/ui/Card";
 import {
   useBalances,
@@ -101,8 +102,8 @@ export default function HouseholdScreen() {
 
   if (loadingHousehold) {
     return (
-      <View className="flex-1 items-center justify-center bg-slate-50">
-        <ActivityIndicator size="large" color="#0ea5e9" />
+      <View className="flex-1 bg-slate-50">
+        <SkeletonLoader count={3} style={{ padding: 20, paddingTop: 32 }} />
       </View>
     );
   }
@@ -255,14 +256,7 @@ export default function HouseholdScreen() {
           <View>
             {/* Summary gradient card */}
             <View
-              className="rounded-3xl overflow-hidden mb-4"
-              style={{
-                shadowColor: "#0ea5e9",
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.2,
-                shadowRadius: 16,
-                elevation: 6,
-              }}
+              className="rounded-3xl overflow-hidden mb-4 shadow-elevated"
             >
               <Svg
                 style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}

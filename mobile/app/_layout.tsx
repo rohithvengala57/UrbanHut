@@ -4,8 +4,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
+import * as Linking from "expo-linking";
 
 import { useAuth } from "@/hooks/useAuth";
+import { captureAttributionFromUrl, getAttributionContext, trackEvent } from "@/lib/analytics";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,6 +23,32 @@ const queryClient = new QueryClient({
 
 function RootLayoutInner() {
   const { isLoading } = useAuth();
+  usePushNotifications();
+
+  useEffect(() => {
+    const trackLandingFromUrl = async (url: string | null) => {
+      if (url) {
+        await captureAttributionFromUrl(url);
+      } else {
+        const initialUrl = await Linking.getInitialURL();
+        await captureAttributionFromUrl(initialUrl);
+      }
+
+      const { first_touch, last_touch } = await getAttributionContext();
+      const source = last_touch?.source ?? first_touch?.source ?? "direct";
+      const medium = last_touch?.medium ?? first_touch?.medium ?? "none";
+      const campaign = last_touch?.campaign ?? first_touch?.campaign ?? "(not_set)";
+      const city = last_touch?.city ?? first_touch?.city ?? "(not_set)";
+      await trackEvent("landing_page_viewed", { source, medium, campaign, city });
+    };
+
+    trackLandingFromUrl(null);
+    const subscription = Linking.addEventListener("url", (event) => {
+      trackLandingFromUrl(event.url);
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (!isLoading) {

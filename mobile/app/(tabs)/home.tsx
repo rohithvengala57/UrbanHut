@@ -17,6 +17,8 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import { ListingCard } from "@/components/listing/ListingCard";
 import ListingsMap from "@/components/map/ListingsMap";
+import { OnboardingChecklist } from "@/components/ui/OnboardingChecklist";
+import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useListings } from "@/hooks/useListings";
 import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
@@ -373,10 +375,7 @@ export default function HomeScreen() {
 
       {/* ============ Content ============ */}
       {isLoading ? (
-        <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#0ea5e9" />
-          <Text className="text-slate-400 mt-3">Loading listings...</Text>
-        </View>
+        <SkeletonLoader count={4} style={{ padding: 16 }} />
       ) : isError ? (
         /* API error state */
         <View className="flex-1 items-center justify-center px-8">
@@ -405,6 +404,7 @@ export default function HomeScreen() {
           refreshing={isRefetching}
           ListHeaderComponent={
             <View>
+              <OnboardingChecklist />
               {/* Smart insight cards */}
               <ScrollView
                 horizontal
@@ -460,14 +460,7 @@ export default function HomeScreen() {
       {viewMode === "list" && (
         <TouchableOpacity
           onPress={() => router.push("/listing/create")}
-          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center"
-          style={{
-            elevation: 8,
-            shadowColor: "#0ea5e9",
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.4,
-            shadowRadius: 12,
-          }}
+          className="absolute bottom-6 right-6 w-14 h-14 bg-primary-500 rounded-full items-center justify-center shadow-elevated"
           activeOpacity={0.85}
         >
           <Feather name="plus" size={26} color="#fff" />

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { Alert, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { Button } from "@/components/ui/Button";
+import { trackEvent } from "@/lib/analytics";
 import { useAuthStore } from "@/stores/authStore";
 import api from "@/services/api";
 
@@ -22,6 +23,10 @@ export default function VerifyEmailScreen() {
     try {
       await api.post("/auth/verify-email", { code });
       await loadUser();
+      await trackEvent("verification_submitted", {
+        verification_type: "email",
+        status: "verified",
+      });
       router.replace("/(tabs)/home");
     } catch (err: any) {
       Alert.alert("Error", err.response?.data?.detail || "Verification failed. Try again.");
@@ -33,6 +38,7 @@ export default function VerifyEmailScreen() {
   const handleResend = async () => {
     setResending(true);
     try {
+      await trackEvent("verification_started", { verification_type: "email" });
       const res = await api.post("/auth/resend-verification");
       // In dev mode the API returns the code directly so we can show it
       const msg = res.data.dev_code

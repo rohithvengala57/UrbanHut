@@ -1,3 +1,4 @@
+from app.models.analytics import TelemetryEvent, UserAttribution
 from app.models.appointment import Appointment
 from app.models.inquiry import ListingInquiry
 from app.models.chat import ChatMessage, ChatRoom
@@ -10,6 +11,7 @@ from app.models.match import MatchInterest, Vouch
 from app.models.refresh_token import RefreshToken
 from app.models.saved_listing import SavedListing
 from app.models.saved_search import SavedSearch
+from app.models.service_booking import ServiceBooking
 from app.models.service_provider import ServiceProvider, ServiceReview
 from app.models.trust_score import TrustEvent, TrustSnapshot
 from app.models.user import User
@@ -19,6 +21,8 @@ from app.models.verification import Verification
 
 __all__ = [
     "User",
+    "TelemetryEvent",
+    "UserAttribution",
     "ListingInquiry",
     "UserProfile",
     "UserSearchPreferences",
@@ -34,6 +38,7 @@ __all__ = [
     "TrustSnapshot",
     "MatchInterest",
     "Vouch",
+    "ServiceBooking",
     "ServiceProvider",
     "ServiceReview",
     "CommunityPost",

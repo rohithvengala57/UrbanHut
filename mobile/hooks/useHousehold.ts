@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { trackEvent } from "@/lib/analytics";
 import api from "@/services/api";
 
 // ─── Household ────────────────────────────────────────────────────────────────
@@ -38,9 +39,13 @@ export function useCreateHousehold() {
       const response = await api.post("/households", data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (household) => {
       queryClient.invalidateQueries({ queryKey: ["household"] });
       queryClient.invalidateQueries({ queryKey: ["household-members"] });
+      await trackEvent("household_created", {
+        household_id: household.id ?? "unknown",
+        max_members: household.max_members,
+      });
     },
   });
 }
@@ -52,9 +57,12 @@ export function useJoinHousehold() {
       const response = await api.post("/households/join", { invite_code });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (household) => {
       queryClient.invalidateQueries({ queryKey: ["household"] });
       queryClient.invalidateQueries({ queryKey: ["household-members"] });
+      await trackEvent("household_member_joined", {
+        household_id: household.id ?? "unknown",
+      });
     },
   });
 }
@@ -88,6 +96,9 @@ export function useExpenses(page = 1, enabled = true) {
         paid_by: string;
         split_type: string;
         status: string;
+        receipt_url: string | null;
+        is_recurring: boolean;
+        recurrence: string | null;
       }>;
     },
     enabled,
@@ -141,10 +152,15 @@ export function useAddExpense() {
       const response = await api.post("/expenses", data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (expense) => {
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       queryClient.invalidateQueries({ queryKey: ["balances"] });
       queryClient.invalidateQueries({ queryKey: ["my-splits"] });
+      await trackEvent("expense_created", {
+        expense_id: expense.id ?? "unknown",
+        amount: expense.amount,
+        category: expense.category,
+      });
     },
   });
 }
@@ -362,10 +378,14 @@ export function useCompleteChore() {
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (assignment) => {
       queryClient.invalidateQueries({ queryKey: ["chore-schedule"] });
       queryClient.invalidateQueries({ queryKey: ["chore-points"] });
       queryClient.invalidateQueries({ queryKey: ["chore-performance"] });
+      await trackEvent("chore_completed", {
+        assignment_id: assignment.id ?? "unknown",
+        chore_id: assignment.chore_id,
+      });
     },
   });
 }
@@ -461,5 +481,55 @@ export function useChoreHistory(weeks = 4, enabled = true) {
       return response.data as ChoreAssignment[];
     },
     enabled,
+  });
+}
+
+// ─── UH-602: Chore Reminders ─────────────────────────────────────────────────
+
+export function useSendChoreReminders() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post("/chores/remind");
+      return response.data as { sent: number; message?: string };
+    },
+  });
+}
+
+// ─── UH-502: Expense Receipts ─────────────────────────────────────────────────
+
+export function useReceiptUploadUrl() {
+  return useMutation({
+    mutationFn: async ({ expenseId, filename, contentType }: { expenseId: string; filename: string; contentType?: string }) => {
+      const response = await api.post(`/expenses/${expenseId}/receipt-upload-url`, {
+        filename,
+        content_type: contentType ?? "image/jpeg",
+      });
+      return response.data as { upload_url: string; s3_key: string };
+    },
+  });
+}
+
+export function useAttachReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ expenseId, s3Key }: { expenseId: string; s3Key: string }) => {
+      const response = await api.patch(`/expenses/${expenseId}/receipt?s3_key=${encodeURIComponent(s3Key)}`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    },
+  });
+}
+
+export function useReceiptDownloadUrl(expenseId: string | null) {
+  return useQuery({
+    queryKey: ["receipt-url", expenseId],
+    queryFn: async () => {
+      const response = await api.get(`/expenses/${expenseId}/receipt-url`);
+      return response.data as { url: string; expires_in_seconds: number };
+    },
+    enabled: !!expenseId,
+    staleTime: 10 * 60 * 1000, // 10 min — well within the 15-min presigned expiry
   });
 }

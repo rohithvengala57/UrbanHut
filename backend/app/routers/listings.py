@@ -28,9 +28,13 @@ from app.schemas.listing import (
     RoommateCard,
 )
 from app.schemas.match import InterestDetailResponse, InterestStatus
+from app.services.analytics import track_backend_event
 from app.services.matching_engine import MatchingEngine
+from app.services.notification_service import NotificationService
 from app.utils.geocoding import geocode_address
 from app.utils.s3 import listing_image_prefix, process_and_upload_image
+
+_notifier = NotificationService()
 
 router = APIRouter()
 _bearer = HTTPBearer(auto_error=False)
@@ -604,6 +608,26 @@ async def create_listing(
         listing_id=str(listing.id),
         geocoded=listing.latitude is not None,
     )
+
+    await track_backend_event(
+        db,
+        event_name="listing_created",
+        user_id=current_user.id,
+        source="backend",
+        properties={
+            "listing_id": str(listing.id),
+            "city": listing.city,
+            "state": listing.state,
+        },
+    )
+
+    # Update onboarding metadata
+    if current_user.onboarding_metadata and "steps" in current_user.onboarding_metadata:
+        if not current_user.onboarding_metadata["steps"].get("first_meaningful_action"):
+            current_user.onboarding_metadata["steps"]["first_meaningful_action"] = True
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(current_user, "onboarding_metadata")
+
     return listing
 
 
@@ -649,6 +673,20 @@ async def update_listing_status(
 
     listing.status = data.status.value
     await db.flush()
+
+    if listing.status == "active":
+        await track_backend_event(
+            db,
+            event_name="listing_published",
+            user_id=current_user.id,
+            source="backend",
+            properties={
+                "listing_id": str(listing.id),
+                "city": listing.city,
+                "state": listing.state,
+            },
+        )
+
     await db.refresh(listing)
     return listing
 
@@ -725,11 +763,42 @@ async def host_decide_interest(
     )
 
     await db.flush()
+
+    if interest.status == "mutual":
+        await track_backend_event(
+            db,
+            event_name="mutual_match_created",
+            user_id=interest.from_user_id,
+            source="backend",
+            properties={"interest_id": str(interest.id), "listing_id": str(listing.id)},
+        )
+
     await db.refresh(interest)
 
     # Return with applicant details
     user_result = await db.execute(select(User).where(User.id == interest.from_user_id))
     applicant = user_result.scalar_one_or_none()
+
+    # Notify applicant of host decision / mutual match
+    if applicant:
+        if interest.status == "mutual":
+            await _notifier.notify_mutual_match(
+                push_token_a=applicant.push_token,
+                email_a=applicant.email,
+                prefs_a=applicant.notification_prefs,
+                push_token_b=current_user.push_token,
+                email_b=current_user.email,
+                prefs_b=current_user.notification_prefs,
+                listing_title=listing.title,
+            )
+        elif interest.status in ("accepted", "shortlisted"):
+            await _notifier.notify_host_decision(
+                applicant_push_token=applicant.push_token,
+                applicant_email=applicant.email,
+                applicant_prefs=applicant.notification_prefs,
+                decision=interest.status,
+                listing_title=listing.title,
+            )
 
     return InterestDetailResponse(
         id=interest.id,

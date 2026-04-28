@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,8 @@ from app.middleware.auth import get_current_user
 from app.models.expense import Expense, ExpenseSplit
 from app.models.user import User
 from app.schemas.expense import BalanceResponse, ExpenseCreate, ExpenseResponse, ExpenseSplitResponse
+from app.services.analytics import track_backend_event
+from app.utils.s3 import generate_presigned_upload_url, generate_presigned_download_url
 
 router = APIRouter()
 
@@ -82,6 +85,20 @@ async def create_expense(
             db.add(split)
 
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="expense_created",
+        user_id=current_user.id,
+        household_id=current_user.household_id,
+        source="backend",
+        properties={
+            "expense_id": str(expense.id),
+            "amount": data.amount,
+            "category": data.category,
+        },
+    )
+
     await db.refresh(expense)
     return expense
 
@@ -274,3 +291,98 @@ async def get_expense(
     if not expense:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
     return expense
+
+
+# ─── UH-502: Receipt Upload ───────────────────────────────────────────────────
+
+class ReceiptUploadRequest(BaseModel):
+    filename: str
+    content_type: str = "image/jpeg"
+
+
+@router.post("/{expense_id}/receipt-upload-url")
+async def get_receipt_upload_url(
+    expense_id: uuid.UUID,
+    data: ReceiptUploadRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a presigned S3 PUT URL for uploading an expense receipt."""
+    if not current_user.household_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not in a household")
+
+    result = await db.execute(
+        select(Expense).where(
+            and_(Expense.id == expense_id, Expense.household_id == current_user.household_id)
+        )
+    )
+    expense = result.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    s3_key = f"receipts/{current_user.household_id}/{expense_id}/{data.filename}"
+    try:
+        upload_url = generate_presigned_upload_url(s3_key, data.content_type)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to generate upload URL")
+
+    return {"upload_url": upload_url, "s3_key": s3_key}
+
+
+@router.patch("/{expense_id}/receipt")
+async def attach_receipt(
+    expense_id: uuid.UUID,
+    s3_key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """After uploading to S3, call this to save the receipt key on the expense."""
+    if not current_user.household_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not in a household")
+
+    expected_prefix = f"receipts/{current_user.household_id}/{expense_id}/"
+    if not s3_key.startswith(expected_prefix):
+        raise HTTPException(status_code=400, detail="Invalid S3 key for this expense")
+
+    result = await db.execute(
+        select(Expense).where(
+            and_(Expense.id == expense_id, Expense.household_id == current_user.household_id)
+        )
+    )
+    expense = result.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    expense.receipt_url = s3_key
+    await db.flush()
+    return {"status": "updated", "receipt_key": s3_key}
+
+
+@router.get("/{expense_id}/receipt-url")
+async def get_receipt_url(
+    expense_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a short-lived presigned download URL for an expense receipt."""
+    if not current_user.household_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not in a household")
+
+    result = await db.execute(
+        select(Expense).where(
+            and_(Expense.id == expense_id, Expense.household_id == current_user.household_id)
+        )
+    )
+    expense = result.scalar_one_or_none()
+    if not expense:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense not found")
+
+    if not expense.receipt_url:
+        raise HTTPException(status_code=404, detail="No receipt attached to this expense")
+
+    try:
+        url = generate_presigned_download_url(expense.receipt_url)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to generate receipt URL")
+
+    return {"url": url, "expires_in_seconds": 900}

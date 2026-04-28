@@ -18,9 +18,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
   useAddExpense,
+  useAttachReceipt,
   useBalances,
   useExpenses,
   useMyPendingSplits,
+  useReceiptUploadUrl,
   useSettleSplit,
 } from "@/hooks/useHousehold";
 import { formatCurrencyDecimal } from "@/lib/format";
@@ -52,6 +54,8 @@ export function ExpensesTab({ members }: Props) {
   const { data: mySplits } = useMyPendingSplits(true);
   const addExpense = useAddExpense();
   const settleSplit = useSettleSplit();
+  const receiptUploadUrl = useReceiptUploadUrl();
+  const attachReceipt = useAttachReceipt();
 
   const myBalance = balances?.find((b) => b.user_id === user?.id);
   const owed = (mySplits || []).filter((s) => s.status === "pending" && s.paid_by_id !== user?.id);
@@ -351,14 +355,48 @@ export function ExpensesTab({ members }: Props) {
                     <View className="flex-row items-center gap-2 mt-1">
                       <Badge label={expense.category} />
                       <Text className="text-xs text-slate-500">{expense.date}</Text>
+                      {expense.is_recurring && (
+                        <View className="flex-row items-center gap-0.5">
+                          <Feather name="repeat" size={10} color="#0ea5e9" />
+                          <Text className="text-xs text-primary-500">{expense.recurrence}</Text>
+                        </View>
+                      )}
                     </View>
                     <Text className="text-xs text-slate-400 mt-0.5">
                       Split: {expense.split_type}
                     </Text>
                   </View>
-                  <Text className="font-bold text-slate-900 text-base">
-                    {formatCurrencyDecimal(expense.amount)}
-                  </Text>
+                  <View className="items-end gap-1">
+                    <Text className="font-bold text-slate-900 text-base">
+                      {formatCurrencyDecimal(expense.amount)}
+                    </Text>
+                    {/* UH-502: Receipt indicator */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        if (expense.receipt_url) {
+                          Alert.alert("Receipt", "Receipt is attached to this expense.");
+                        } else {
+                          Alert.alert(
+                            "Add Receipt",
+                            "To attach a receipt, use the Upload Receipt option.",
+                            [{ text: "OK" }]
+                          );
+                        }
+                      }}
+                      className="flex-row items-center gap-1"
+                    >
+                      <Feather
+                        name="file-text"
+                        size={13}
+                        color={expense.receipt_url ? "#22c55e" : "#cbd5e1"}
+                      />
+                      <Text
+                        className={`text-xs ${expense.receipt_url ? "text-green-600" : "text-slate-300"}`}
+                      >
+                        {expense.receipt_url ? "Receipt" : "No receipt"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </Card>
             ))

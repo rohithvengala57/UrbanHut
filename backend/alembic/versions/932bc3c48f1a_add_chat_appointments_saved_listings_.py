@@ -24,7 +24,7 @@ def upgrade() -> None:
     sa.Column('id', sa.UUID(), nullable=False),
     sa.Column('user_id', sa.UUID(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
-    sa.Column('filters', postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+    sa.Column('filters', sa.JSON(), nullable=False),
     sa.Column('alerts_enabled', sa.Boolean(), nullable=False),
     sa.Column('last_notified_count', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),

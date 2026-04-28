@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,7 @@ from app.schemas.chore import (
     PointsSummary,
     ScheduleGenerateRequest,
 )
+from app.services.analytics import track_backend_event
 from app.services.chore_scheduler import ChoreScheduler, ScheduleImpossibleError
 
 router = APIRouter()
@@ -422,6 +423,19 @@ async def complete_chore(
         assignment.points_earned = float(chore.weight)
 
     await db.flush()
+
+    await track_backend_event(
+        db,
+        event_name="chore_completed",
+        user_id=current_user.id,
+        household_id=hh_id,
+        source="backend",
+        properties={
+            "assignment_id": str(assignment.id),
+            "chore_id": str(assignment.chore_id),
+        },
+    )
+
     await db.refresh(assignment)
     return assignment
 
@@ -563,3 +577,161 @@ async def get_performance(
         )
 
     return sorted(summaries, key=lambda x: -x.total_points)
+
+
+# ─── UH-603: Chore Calendar Export (iCal) ────────────────────────────────────
+
+def _build_ical(assignments: list, templates: dict, members: dict, household_name: str) -> str:
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//UrbanHut//Chores//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{household_name} Chores",
+    ]
+
+    day_names = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+
+    for a in assignments:
+        tmpl = templates.get(a.chore_id)
+        member = members.get(a.assigned_to)
+        chore_name = tmpl.name if tmpl else "Chore"
+        assignee_name = member.full_name if member else "Unknown"
+
+        event_date = a.week_start + timedelta(days=a.day_of_week)
+        dtstart = event_date.strftime("%Y%m%d")
+        dtend = (event_date + timedelta(days=1)).strftime("%Y%m%d")
+        uid_str = str(a.id).replace("-", "")
+
+        description = f"Assigned to: {assignee_name}"
+        if tmpl and tmpl.description:
+            description = f"{tmpl.description}\\nAssigned to: {assignee_name}"
+
+        status_str = "CONFIRMED" if a.status != "missed" else "CANCELLED"
+
+        lines += [
+            "BEGIN:VEVENT",
+            f"UID:{uid_str}@urbanhut",
+            f"DTSTART;VALUE=DATE:{dtstart}",
+            f"DTEND;VALUE=DATE:{dtend}",
+            f"SUMMARY:{chore_name}",
+            f"DESCRIPTION:{description}",
+            f"STATUS:{status_str}",
+            "END:VEVENT",
+        ]
+
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines)
+
+
+@router.get("/calendar.ics")
+async def export_chore_calendar(
+    weeks: int = Query(4, ge=1, le=26),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Download an iCal (.ics) file of household chore assignments."""
+    hh_id = await _require_household(current_user)
+
+    household_result = await db.execute(select(Household).where(Household.id == hh_id))
+    household = household_result.scalar_one_or_none()
+    household_name = household.name if household else "Household"
+
+    today = date.today()
+    earliest = _monday(today) - timedelta(weeks=weeks)
+
+    assignments_result = await db.execute(
+        select(ChoreAssignment).where(
+            and_(
+                ChoreAssignment.household_id == hh_id,
+                ChoreAssignment.week_start >= earliest,
+            )
+        ).order_by(ChoreAssignment.week_start, ChoreAssignment.day_of_week)
+    )
+    assignments = list(assignments_result.scalars().all())
+
+    chore_ids = {a.chore_id for a in assignments}
+    templates_result = await db.execute(
+        select(ChoreTemplate).where(ChoreTemplate.id.in_(chore_ids))
+    )
+    templates = {t.id: t for t in templates_result.scalars().all()}
+
+    members_result = await db.execute(select(User).where(User.household_id == hh_id))
+    members = {m.id: m for m in members_result.scalars().all()}
+
+    ical_content = _build_ical(assignments, templates, members, household_name)
+
+    return Response(
+        content=ical_content,
+        media_type="text/calendar",
+        headers={"Content-Disposition": 'attachment; filename="chores.ics"'},
+    )
+
+
+# ─── UH-602: Chore Reminders ─────────────────────────────────────────────────
+
+@router.post("/remind")
+async def send_chore_reminders(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send push notifications to household members for their pending chores today.
+    Any household member can trigger reminders; typically called by an admin or scheduled job.
+    """
+    hh_id = await _require_household(current_user)
+
+    today = date.today()
+    week_start = _monday(today)
+    day_of_week = today.weekday()
+
+    assignments_result = await db.execute(
+        select(ChoreAssignment).where(
+            and_(
+                ChoreAssignment.household_id == hh_id,
+                ChoreAssignment.week_start == week_start,
+                ChoreAssignment.day_of_week == day_of_week,
+                ChoreAssignment.status == "pending",
+            )
+        )
+    )
+    assignments = list(assignments_result.scalars().all())
+
+    if not assignments:
+        return {"sent": 0, "message": "No pending chores for today"}
+
+    chore_ids = {a.chore_id for a in assignments}
+    templates_result = await db.execute(
+        select(ChoreTemplate).where(ChoreTemplate.id.in_(chore_ids))
+    )
+    templates = {t.id: t for t in templates_result.scalars().all()}
+
+    user_ids = {a.assigned_to for a in assignments}
+    members_result = await db.execute(select(User).where(User.id.in_(user_ids)))
+    members = {m.id: m for m in members_result.scalars().all()}
+
+    from app.services.notification_service import NotificationService
+    notifier = NotificationService()
+    sent = 0
+
+    for a in assignments:
+        member = members.get(a.assigned_to)
+        if not member:
+            continue
+        prefs = member.notification_prefs or {}
+        if not prefs.get("chore_reminder", True):
+            continue
+
+        tmpl = templates.get(a.chore_id)
+        chore_name = tmpl.name if tmpl else "a chore"
+
+        await notifier.send_push(
+            push_token=getattr(member, "push_token", None),
+            title="Chore reminder",
+            body=f"You have '{chore_name}' due today.",
+            data={"type": "chore_reminder", "assignment_id": str(a.id)},
+        )
+        sent += 1
+
+    return {"sent": sent}

@@ -11,6 +11,13 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=100)
+    referral_code: str | None = Field(None, max_length=20)
+    utm_source: str | None = Field(None, max_length=100)
+    utm_medium: str | None = Field(None, max_length=100)
+    utm_campaign: str | None = Field(None, max_length=200)
+    utm_term: str | None = Field(None, max_length=100)
+    utm_content: str | None = Field(None, max_length=100)
+    utm_city: str | None = Field(None, max_length=120)
 
 
 class UserLogin(BaseModel):
@@ -86,6 +93,8 @@ class UserResponse(BaseModel):
     status: str
     household_id: uuid.UUID | None = None
     trust_score: float
+    referral_code: str | None = None
+    onboarding_metadata: dict | None = None
     # Cold-start UX: show "New Member" badge for users with low behavioral data.
     # Frontend should display this instead of the raw score when is_new_member=True.
     is_new_member: bool = False

@@ -184,6 +184,31 @@ export default function ProfileScreen() {
           )}
         </Card>
 
+        {/* ── Referral card ── */}
+        <Card className="mb-4 bg-primary-50 border-primary-100">
+          <View className="flex-row items-center justify-between mb-2">
+            <Text className="font-bold text-slate-900 text-lg">Refer Your Friends</Text>
+            <Feather name="share-2" size={18} color="#0ea5e9" />
+          </View>
+          <Text className="text-slate-600 text-sm mb-4">
+            Invite friends to join Urban Hut and boost your trust together!
+          </Text>
+          <View className="bg-white rounded-xl p-3 border border-primary-200 flex-row items-center justify-between">
+            <View>
+              <Text className="text-xs text-slate-400 uppercase font-bold tracking-wider">Your Code</Text>
+              <Text className="text-xl font-bold text-primary-600">{user.referral_code || "GEN-CODE"}</Text>
+            </View>
+            <TouchableOpacity 
+              className="bg-primary-500 rounded-lg px-4 py-2"
+              onPress={() => {
+                Alert.alert("Code Copied", "Share this code with your friends!");
+              }}
+            >
+              <Text className="text-white font-bold">Share</Text>
+            </TouchableOpacity>
+          </View>
+        </Card>
+
         {/* ── Trust activity timeline ── */}
         <Card className="mb-4">
           <Text className="font-bold text-slate-900 text-lg mb-3">Trust Activity</Text>
