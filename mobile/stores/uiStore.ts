@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 export interface ListingFilters {
   city?: string;
+  state?: string;
+  zip_code?: string;
   price_min?: number;
   price_max?: number;
   room_type?: string;

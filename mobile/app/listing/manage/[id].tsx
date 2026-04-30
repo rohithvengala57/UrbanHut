@@ -29,6 +29,8 @@ import {
 import { useListing } from "@/hooks/useListings";
 import { formatCurrency, formatRelativeDate } from "@/lib/format";
 
+const URBAN_HUT_LOGO = require("@/assets/urban-hut-mark.png");
+
 type ManageTab = "overview" | "interests" | "messages" | "edit";
 
 function parseCsvList(value: string) {
@@ -203,9 +205,12 @@ export default function ManageListingScreen() {
 
         <View className="flex-row items-center justify-between mb-6">
           <View className="flex-row items-center gap-2">
-            <View className="w-8 h-8 bg-[#10b981] rounded-lg items-center justify-center">
-              <Feather name="home" size={18} color="#fff" />
-            </View>
+            <Image
+              source={URBAN_HUT_LOGO}
+              resizeMode="contain"
+              className="w-8 h-8"
+              style={{ width: 32, height: 32 }}
+            />
             <View>
               <Text className="text-lg font-black text-slate-900 tracking-tight">urbanhut</Text>
               <Text className="text-[#10b981] text-[8px] font-bold tracking-widest uppercase -mt-1">find your next home</Text>

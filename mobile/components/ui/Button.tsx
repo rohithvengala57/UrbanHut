@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { gradients } from "@/constants/theme";
 
@@ -29,6 +29,11 @@ export function Button({
     md: "px-6 py-3",
     lg: "px-8 py-4",
   };
+  const sizeFallbackStyles = {
+    sm: styles.sizeSm,
+    md: styles.sizeMd,
+    lg: styles.sizeLg,
+  };
   const variantStyles = {
     primary: "",
     secondary: "bg-slate-700",
@@ -46,15 +51,25 @@ export function Button({
     md: "text-sm",
     lg: "text-base",
   };
+  const textSizeFallbackStyles = {
+    sm: styles.textSm,
+    md: styles.textMd,
+    lg: styles.textLg,
+  };
 
   const content = (
-    <View className="flex-row items-center gap-2">
+    <View className="flex-row items-center gap-2" style={styles.content}>
       {loading ? (
         <ActivityIndicator color={variant === "primary" || variant === "secondary" ? "#fff" : "#10b981"} />
       ) : (
         <>
           {icon}
-          <Text className={`${textVariantStyles[variant]} ${textSizeStyles[size]}`}>{title}</Text>
+          <Text
+            className={`${textVariantStyles[variant]} ${textSizeStyles[size]}`}
+            style={[styles.text, textFallbackStyles[variant], textSizeFallbackStyles[size]]}
+          >
+            {title}
+          </Text>
         </>
       )}
     </View>
@@ -65,6 +80,7 @@ export function Button({
       onPress={onPress}
       disabled={disabled || loading}
       className={`${baseStyle} ${disabled ? "opacity-50" : ""}`}
+      style={[styles.base, disabled && styles.disabled]}
       activeOpacity={0.85}
     >
       {variant === "primary" ? (
@@ -73,14 +89,96 @@ export function Button({
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           className={`${sizeStyles[size]} w-full items-center justify-center`}
+          style={[styles.inner, sizeFallbackStyles[size]]}
         >
           {content}
         </LinearGradient>
       ) : (
-        <View className={`${sizeStyles[size]} ${variantStyles[variant]} w-full items-center justify-center`}>
+        <View
+          className={`${sizeStyles[size]} ${variantStyles[variant]} w-full items-center justify-center`}
+          style={[styles.inner, variantFallbackStyles[variant], sizeFallbackStyles[size]]}
+        >
           {content}
         </View>
       )}
     </TouchableOpacity>
   );
 }
+
+const variantFallbackStyles = {
+  primary: {},
+  secondary: {
+    backgroundColor: "#334155",
+  },
+  outline: {
+    borderColor: "#0ea5e9",
+    borderWidth: 2,
+  },
+  ghost: {},
+};
+
+const textFallbackStyles = {
+  primary: {
+    color: "#fff",
+    fontWeight: "700" as const,
+  },
+  secondary: {
+    color: "#fff",
+    fontWeight: "600" as const,
+  },
+  outline: {
+    color: "#0ea5e9",
+    fontWeight: "600" as const,
+  },
+  ghost: {
+    color: "#0ea5e9",
+    fontWeight: "500" as const,
+  },
+};
+
+const styles = StyleSheet.create({
+  base: {
+    alignSelf: "stretch",
+    borderRadius: 16,
+    flexDirection: "row",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  inner: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+  },
+  content: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  sizeSm: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  sizeMd: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  sizeLg: {
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+  },
+  text: {
+    textAlign: "center",
+  },
+  textSm: {
+    fontSize: 12,
+  },
+  textMd: {
+    fontSize: 14,
+  },
+  textLg: {
+    fontSize: 16,
+  },
+});

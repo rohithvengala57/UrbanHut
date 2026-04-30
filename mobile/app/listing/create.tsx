@@ -5,6 +5,7 @@ import * as SecureStore from "expo-secure-store";
 import { router } from "expo-router";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -12,6 +13,7 @@ import {
   Platform,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -36,6 +38,35 @@ const RULE_OPTIONS = [
 ];
 
 const STEPS = ["Photos", "Basic Info", "Details", "Amenities", "Rules"];
+
+type LocationSuggestion = {
+  id: string;
+  label: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+};
+
+type NominatimPlace = {
+  place_id: number;
+  display_name: string;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    hamlet?: string;
+    suburb?: string;
+    county?: string;
+    state?: string;
+    region?: string;
+    province?: string;
+    state_district?: string;
+    postcode?: string;
+    country_code?: string;
+  };
+};
 
 type FormState = {
   title: string;
@@ -107,6 +138,38 @@ function formatDateDisplay(isoDate: string) {
   if (!isoDate) return "";
   const d = new Date(`${isoDate}T00:00:00`);
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+function formatNominatimPlace(place: NominatimPlace): LocationSuggestion | null {
+  const address = place.address ?? {};
+  const city =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.hamlet ||
+    address.suburb ||
+    address.county ||
+    "";
+  const state = address.state || address.region || address.province || address.state_district || "";
+  const zipCode = address.postcode || "";
+  const country = address.country_code?.toUpperCase();
+
+  if (!city && !zipCode) return null;
+
+  const cityState = [city, state].filter(Boolean).join(", ");
+  const label = [cityState || place.display_name.split(",").slice(0, 2).join(", "), zipCode]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: String(place.place_id),
+    label,
+    city: city || undefined,
+    state: state || undefined,
+    zipCode: zipCode || undefined,
+    country,
+  };
 }
 
 /* ── Date picker modal ── */
@@ -289,7 +352,14 @@ export default function CreateListingScreen() {
   const [houseRules, setHouseRules] = useState<string[]>([]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [datePickerField, setDatePickerField] = useState<"available_from" | "available_until" | null>(null);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationFocused, setLocationFocused] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState(false);
   const draftSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const locationAbortRef = useRef<AbortController | null>(null);
 
   // Restore draft on mount
   useEffect(() => {
@@ -298,7 +368,11 @@ export default function CreateListingScreen() {
         const draft = await SecureStore.getItemAsync(DRAFT_KEY);
         if (draft) {
           const parsed = JSON.parse(draft);
-          if (parsed.form) setForm({ ...INITIAL_FORM, ...parsed.form });
+          if (parsed.form) {
+            const nextForm = { ...INITIAL_FORM, ...parsed.form };
+            setForm(nextForm);
+            setLocationQuery([nextForm.city, nextForm.state].filter(Boolean).join(", "));
+          }
           if (parsed.amenities) setAmenities(parsed.amenities);
           if (parsed.houseRules) setHouseRules(parsed.houseRules);
         }
@@ -327,6 +401,100 @@ export default function CreateListingScreen() {
     if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
     persistDraft(next, amenities, houseRules);
   };
+
+  const updateLocationQuery = useCallback((text: string) => {
+    setLocationQuery(text);
+    const [cityPart, statePart = ""] = text.split(",").map((part) => part.trim());
+    const zipCode = text.match(/\b\d{4,10}(?:-\d{4})?\b/)?.[0] ?? "";
+    const state = statePart.replace(/\b\d{4,10}(?:-\d{4})?\b/, "").trim();
+    const next = {
+      ...form,
+      city: cityPart,
+      state,
+      zip_code: zipCode || form.zip_code,
+    };
+    setForm(next);
+    if (errors.city) setErrors((e) => ({ ...e, city: undefined }));
+    persistDraft(next, amenities, houseRules);
+  }, [amenities, errors.city, form, houseRules, persistDraft]);
+
+  const selectLocationSuggestion = useCallback((suggestion: LocationSuggestion) => {
+    const next = {
+      ...form,
+      city: suggestion.city ?? form.city,
+      state: suggestion.state ?? form.state,
+      zip_code: suggestion.zipCode ?? form.zip_code,
+    };
+    setForm(next);
+    setLocationQuery(suggestion.label);
+    setLocationFocused(false);
+    setLocationSuggestions([]);
+    if (errors.city) setErrors((e) => ({ ...e, city: undefined }));
+    persistDraft(next, amenities, houseRules);
+  }, [amenities, errors.city, form, houseRules, persistDraft]);
+
+  useEffect(() => {
+    const query = locationQuery.trim();
+    if (!locationFocused || query.length < 2) {
+      setLocationSuggestions([]);
+      setLocationLoading(false);
+      setLocationError(false);
+      locationAbortRef.current?.abort();
+      return;
+    }
+
+    if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+    locationDebounceRef.current = setTimeout(async () => {
+      locationAbortRef.current?.abort();
+      const controller = new AbortController();
+      locationAbortRef.current = controller;
+      setLocationLoading(true);
+      setLocationError(false);
+
+      try {
+        const params = new URLSearchParams({
+          q: query,
+          format: "jsonv2",
+          addressdetails: "1",
+          limit: "6",
+          "accept-language": "en",
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+          signal: controller.signal,
+          headers: { Accept: "application/json" },
+        });
+        if (!response.ok) throw new Error("location search failed");
+        const data = (await response.json()) as NominatimPlace[];
+        const seen = new Set<string>();
+        const nextSuggestions = data
+          .map(formatNominatimPlace)
+          .filter((suggestion): suggestion is LocationSuggestion => Boolean(suggestion))
+          .filter((suggestion) => {
+            const key = `${suggestion.city ?? ""}|${suggestion.state ?? ""}|${suggestion.zipCode ?? ""}|${suggestion.country ?? ""}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 5);
+        setLocationSuggestions(nextSuggestions);
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setLocationError(true);
+          setLocationSuggestions([]);
+        }
+      } finally {
+        setLocationLoading(false);
+      }
+    }, 650);
+  }, [locationFocused, locationQuery]);
+
+  useEffect(() => {
+    return () => {
+      if (draftSaveRef.current) clearTimeout(draftSaveRef.current);
+      if (locationDebounceRef.current) clearTimeout(locationDebounceRef.current);
+      locationAbortRef.current?.abort();
+    };
+  }, []);
 
   const toggleAmenity = (item: string) => {
     const next = amenities.includes(item) ? amenities.filter((a) => a !== item) : [...amenities, item];
@@ -619,20 +787,112 @@ export default function CreateListingScreen() {
             <Input label="Address *" placeholder="123 Main St" value={form.address_line1} onChangeText={(v) => updateField("address_line1", v)} />
             <FieldError message={errors.address_line1} />
 
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <View style={{ flex: 2 }}>
-                <Input label="City *" placeholder="Jersey City" value={form.city} onChangeText={(v) => updateField("city", v)} />
-                <FieldError message={errors.city} />
+            <View style={{ marginBottom: 16, zIndex: 20 }}>
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#334155", marginBottom: 6 }}>City, State, or ZIP *</Text>
+              <View
+                style={{
+                  minHeight: 52,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: errors.city ? "#f87171" : "#e2e8f0",
+                  backgroundColor: "#f8fafc",
+                  paddingHorizontal: 14,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: "#ecfdf5", alignItems: "center", justifyContent: "center" }}>
+                  <Feather name="search" size={16} color="#10b981" />
+                </View>
+                <TextInput
+                  value={locationQuery}
+                  onChangeText={updateLocationQuery}
+                  onFocus={() => setLocationFocused(true)}
+                  placeholder="Search city, state, or ZIP"
+                  placeholderTextColor="#94a3b8"
+                  returnKeyType="search"
+                  style={{ flex: 1, marginLeft: 10, color: "#0f172a", fontSize: 16, fontWeight: "700", paddingVertical: 0 }}
+                />
+                {locationLoading && <ActivityIndicator size="small" color="#10b981" />}
               </View>
+              <FieldError message={errors.city} />
+
+              {locationSuggestions.length > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 82,
+                    left: 0,
+                    right: 0,
+                    zIndex: 30,
+                    backgroundColor: "#fff",
+                    borderWidth: 1,
+                    borderColor: "#e2e8f0",
+                    borderRadius: 16,
+                    overflow: "hidden",
+                    shadowColor: "#0f172a",
+                    shadowOpacity: 0.12,
+                    shadowRadius: 14,
+                    shadowOffset: { width: 0, height: 8 },
+                  }}
+                >
+                  {locationSuggestions.map((suggestion) => (
+                    <TouchableOpacity
+                      key={suggestion.id}
+                      onPress={() => selectLocationSuggestion(suggestion)}
+                      activeOpacity={0.85}
+                      style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+                    >
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#ecfdf5", alignItems: "center", justifyContent: "center" }}>
+                        <Feather name="map-pin" size={15} color="#10b981" />
+                      </View>
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={{ color: "#0f172a", fontSize: 14, fontWeight: "800" }}>{suggestion.label}</Text>
+                        <Text style={{ color: "#64748b", fontSize: 12 }}>
+                          {[suggestion.country, suggestion.zipCode ? "ZIP match" : "Area match"].filter(Boolean).join(" · ")}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              {locationFocused && locationQuery.trim().length >= 2 && locationSuggestions.length === 0 && !locationLoading && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 82,
+                    left: 0,
+                    right: 0,
+                    zIndex: 30,
+                    backgroundColor: "#fff",
+                    borderWidth: 1,
+                    borderColor: "#e2e8f0",
+                    borderRadius: 16,
+                    padding: 14,
+                    shadowColor: "#0f172a",
+                    shadowOpacity: 0.12,
+                    shadowRadius: 14,
+                    shadowOffset: { width: 0, height: 8 },
+                  }}
+                >
+                  <Text style={{ color: "#64748b", fontSize: 13, fontWeight: "600" }}>
+                    {locationError ? "Location lookup unavailable" : "No location suggestions found"}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 12, zIndex: 1 }}>
               <View style={{ flex: 1 }}>
                 <Input label="State" placeholder="NJ" value={form.state} onChangeText={(v) => updateField("state", v)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Input label="Zip Code" placeholder="07302" value={form.zip_code} onChangeText={(v) => updateField("zip_code", v)} keyboardType="numeric" />
               </View>
             </View>
 
             <View style={{ flexDirection: "row", gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Input label="Zip Code" placeholder="07302" value={form.zip_code} onChangeText={(v) => updateField("zip_code", v)} keyboardType="numeric" />
-              </View>
               <View style={{ flex: 1 }}>
                 <Input label="Rent ($/mo) *" placeholder="1200" value={form.rent_monthly} onChangeText={(v) => updateField("rent_monthly", v)} keyboardType="numeric" />
                 <FieldError message={errors.rent_monthly} />

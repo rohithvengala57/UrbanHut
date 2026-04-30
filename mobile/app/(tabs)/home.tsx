@@ -1,9 +1,13 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
+import * as Location from "expo-location";
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Image,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -20,9 +24,10 @@ import ListingsMap from "@/components/map/ListingsMap";
 import { OnboardingChecklist } from "@/components/ui/OnboardingChecklist";
 import { SkeletonLoader } from "@/components/ui/SkeletonLoader";
 import { useListings } from "@/hooks/useListings";
-import { useAuthStore } from "@/stores/authStore";
 import { useUIStore } from "@/stores/uiStore";
 import type { ListingFilters } from "@/stores/uiStore";
+
+const URBAN_HUT_LOGO = require("@/assets/logo-vertical.png");
 
 /* ---------- constants ---------- */
 const ROOM_TYPES = [
@@ -41,12 +46,44 @@ const PROPERTY_TYPES = [
 const TRUST_BANDS = [25, 50, 75] as const;
 
 const SORT_OPTIONS = [
-  { value: "newest", label: "Newest" },
+  { value: "relevance", label: "Recommended" },
+  { value: "created_at", label: "Newest" },
   { value: "price_asc", label: "Price: Low to High" },
   { value: "price_desc", label: "Price: High to Low" },
 ] as const;
 
-/* ---------- Insight card data ---------- */
+type LocationSuggestion = {
+  id: string;
+  label: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+};
+
+type NominatimPlace = {
+  place_id: number;
+  display_name: string;
+  type?: string;
+  addresstype?: string;
+  address?: {
+    city?: string;
+    town?: string;
+    village?: string;
+    municipality?: string;
+    hamlet?: string;
+    suburb?: string;
+    county?: string;
+    state?: string;
+    region?: string;
+    province?: string;
+    state_district?: string;
+    postcode?: string;
+    country_code?: string;
+  };
+};
+
+/* ---------- Insight card data ---------- 
 const INSIGHT_CARDS = [
   {
     key: "match",
@@ -72,11 +109,13 @@ const INSIGHT_CARDS = [
     gradientStart: "#f59e0b",
     gradientEnd: "#ef4444",
   },
-] as const;
+] as const; */
 
 /* ---------- chip label helpers ---------- */
 const FILTER_LABELS: Record<keyof ListingFilters, string> = {
   city: "City",
+  state: "State",
+  zip_code: "ZIP",
   price_min: "Min $",
   price_max: "Max $",
   room_type: "Room",
@@ -104,6 +143,52 @@ function chipLabel(key: keyof ListingFilters, value: unknown): string {
   if (key === "min_trust") return `Trust ${value}+`;
   const prefix = FILTER_LABELS[key] ?? key;
   return `${prefix}: ${value}`;
+}
+
+function cityFilterValue(city: string): string {
+  return city.split(",")[0]?.trim() ?? "";
+}
+
+function stateFilterValue(input: string): string | undefined {
+  const parts = input.split(",").map((part) => part.trim()).filter(Boolean);
+  const state = parts[1]?.replace(/\b\d{4,10}(?:-\d{4})?\b/, "").trim();
+  return state || undefined;
+}
+
+function zipFilterValue(input: string): string | undefined {
+  return input.match(/\b\d{4,10}(?:-\d{4})?\b/)?.[0];
+}
+
+function formatNominatimPlace(place: NominatimPlace): LocationSuggestion | null {
+  const address = place.address ?? {};
+  const city =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.hamlet ||
+    address.suburb ||
+    address.county ||
+    "";
+  const state = address.state || address.region || address.province || address.state_district || "";
+  const zipCode = address.postcode || "";
+  const country = address.country_code?.toUpperCase();
+
+  if (!city && !zipCode) return null;
+
+  const cityState = [city, state].filter(Boolean).join(", ");
+  const label = [cityState || place.display_name.split(",").slice(0, 2).join(", "), zipCode]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    id: String(place.place_id),
+    label,
+    city: city || undefined,
+    state: state || undefined,
+    zipCode: zipCode || undefined,
+    country,
+  };
 }
 
 /* ── Insight card component ── */
@@ -205,7 +290,14 @@ function MapWithErrorBoundary({
 /* ================================================================== */
 export default function HomeScreen() {
   const [filterVisible, setFilterVisible] = useState(false);
+  const [sortVisible, setSortVisible] = useState(false);
   const [filterApplying, setFilterApplying] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [cityFocused, setCityFocused] = useState(false);
+  const [locationTried, setLocationTried] = useState(false);
+  const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionsError, setSuggestionsError] = useState(false);
   const [draftPriceMin, setDraftPriceMin] = useState("");
   const [draftPriceMax, setDraftPriceMax] = useState("");
   const [draftAvailableFrom, setDraftAvailableFrom] = useState("");
@@ -216,27 +308,196 @@ export default function HomeScreen() {
   const updateFilter = useUIStore((s) => s.updateFilter);
   const clearFilters = useUIStore((s) => s.clearFilters);
   const clearFilter = useUIStore((s) => s.clearFilter);
-  const user = useAuthStore((s) => s.user);
 
   // Local city text for debounced search
   const [cityText, setCityText] = useState(listingFilters.city ?? "");
   const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestionsAbortRef = useRef<AbortController | null>(null);
+
+  const updateLocationFilters = useCallback(
+    (input: string, suggestion?: LocationSuggestion) => {
+      const city = suggestion?.city ?? cityFilterValue(input);
+      const state = suggestion?.state ?? stateFilterValue(input);
+      const zipCode = suggestion?.zipCode ?? zipFilterValue(input);
+      updateFilter("city", city || undefined);
+      updateFilter("state", state || undefined);
+      updateFilter("zip_code", zipCode || undefined);
+    },
+    [updateFilter],
+  );
+
+  const applyCity = useCallback(
+    (city: string, suggestion?: LocationSuggestion) => {
+      const nextCity = city.trim();
+      if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+      setCityText(nextCity);
+      updateLocationFilters(nextCity, suggestion);
+      setLocationSuggestions([]);
+      setCityFocused(false);
+      Keyboard.dismiss();
+    },
+    [updateLocationFilters],
+  );
 
   const handleCityChange = useCallback(
     (text: string) => {
       setCityText(text);
       if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
       cityDebounceRef.current = setTimeout(() => {
-        updateFilter("city", text || undefined);
+        updateLocationFilters(text);
       }, 500);
     },
-    [updateFilter],
+    [updateLocationFilters],
   );
+
+  const handleCitySubmit = useCallback(() => {
+    applyCity(cityText);
+  }, [applyCity, cityText]);
+
+  const handleClearCity = useCallback(() => {
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+    setCityText("");
+    setLocationSuggestions([]);
+    updateFilter("city", undefined);
+    updateFilter("state", undefined);
+    updateFilter("zip_code", undefined);
+    setCityFocused(false);
+    Keyboard.dismiss();
+  }, [updateFilter]);
+
+  const detectCurrentCity = useCallback(async (showAlerts: boolean) => {
+    if (locating) return;
+    setLocationTried(true);
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        if (showAlerts) {
+          Alert.alert(
+            "Location permission needed",
+            "Allow location access to detect your current city.",
+          );
+        }
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      const places = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+      const place = places[0];
+      const detectedCity = place?.city || place?.subregion || place?.district || "";
+      const detectedState = place?.region || "";
+      const cityLabel = [detectedCity, detectedState].filter(Boolean).join(", ");
+
+      if (!cityLabel) {
+        if (showAlerts) {
+          Alert.alert("Location found", "We could not determine a city from your current location.");
+        }
+        return;
+      }
+
+      if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+      setCityText(cityLabel);
+      updateLocationFilters(cityLabel, {
+        id: "current-location",
+        label: cityLabel,
+        city: detectedCity || undefined,
+        state: detectedState || undefined,
+      });
+      setCityFocused(false);
+    } catch {
+      if (showAlerts) {
+        Alert.alert("Location unavailable", "We could not get your current city. Please enter it manually.");
+      }
+    } finally {
+      setLocating(false);
+    }
+  }, [locating, updateLocationFilters]);
+
+  const handleUseCurrentLocation = useCallback(() => {
+    detectCurrentCity(true);
+  }, [detectCurrentCity]);
 
   // Sync cityText if filter is cleared externally
   useEffect(() => {
-    if (!listingFilters.city) setCityText("");
-  }, [listingFilters.city]);
+    if (!listingFilters.city && !listingFilters.state && !listingFilters.zip_code) setCityText("");
+  }, [listingFilters.city, listingFilters.state, listingFilters.zip_code]);
+
+  useEffect(() => {
+    return () => {
+      if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+      if (suggestionsDebounceRef.current) clearTimeout(suggestionsDebounceRef.current);
+      suggestionsAbortRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!listingFilters.city && !listingFilters.state && !listingFilters.zip_code && !cityText && !locationTried) {
+      detectCurrentCity(false);
+    }
+  }, [cityText, detectCurrentCity, listingFilters.city, listingFilters.state, listingFilters.zip_code, locationTried]);
+
+  useEffect(() => {
+    const query = cityText.trim();
+    if (!cityFocused || query.length < 2) {
+      setLocationSuggestions([]);
+      setSuggestionsLoading(false);
+      setSuggestionsError(false);
+      suggestionsAbortRef.current?.abort();
+      return;
+    }
+
+    if (suggestionsDebounceRef.current) clearTimeout(suggestionsDebounceRef.current);
+    suggestionsDebounceRef.current = setTimeout(async () => {
+      suggestionsAbortRef.current?.abort();
+      const controller = new AbortController();
+      suggestionsAbortRef.current = controller;
+      setSuggestionsLoading(true);
+      setSuggestionsError(false);
+
+      try {
+        const params = new URLSearchParams({
+          q: query,
+          format: "jsonv2",
+          addressdetails: "1",
+          limit: "6",
+          "accept-language": "en",
+        });
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+          signal: controller.signal,
+          headers: {
+            Accept: "application/json",
+          },
+        });
+        if (!response.ok) throw new Error("location search failed");
+        const data = (await response.json()) as NominatimPlace[];
+        const seen = new Set<string>();
+        const nextSuggestions = data
+          .map(formatNominatimPlace)
+          .filter((suggestion): suggestion is LocationSuggestion => Boolean(suggestion))
+          .filter((suggestion) => {
+            const key = `${suggestion.city ?? ""}|${suggestion.state ?? ""}|${suggestion.zipCode ?? ""}|${suggestion.country ?? ""}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 5);
+        setLocationSuggestions(nextSuggestions);
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setSuggestionsError(true);
+          setLocationSuggestions([]);
+        }
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }, 650);
+  }, [cityFocused, cityText]);
 
   const {
     data: listings,
@@ -246,12 +507,40 @@ export default function HomeScreen() {
     isRefetching,
   } = useListings(listingFilters);
 
+  const selectedSort = listingFilters.sort_by ?? "relevance";
+  const selectedSortOption = SORT_OPTIONS.find((opt) => opt.value === selectedSort) ?? SORT_OPTIONS[0];
+
+  const applySort = useCallback(
+    (value: (typeof SORT_OPTIONS)[number]["value"]) => {
+      updateFilter("sort_by", value === "relevance" ? undefined : value);
+      setSortVisible(false);
+    },
+    [updateFilter],
+  );
+
+  const sortedListings = useMemo(() => {
+    const items = [...(listings ?? [])];
+    if (selectedSort === "price_asc") {
+      return items.sort((a: any, b: any) => (a.rent_monthly ?? 0) - (b.rent_monthly ?? 0));
+    }
+    if (selectedSort === "price_desc") {
+      return items.sort((a: any, b: any) => (b.rent_monthly ?? 0) - (a.rent_monthly ?? 0));
+    }
+    if (selectedSort === "created_at") {
+      return items.sort(
+        (a: any, b: any) =>
+          new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+      );
+    }
+    return items;
+  }, [listings, selectedSort]);
+
   const activeChips = useMemo(() => {
     const chips: { key: keyof ListingFilters; label: string }[] = [];
     const keys = Object.keys(listingFilters) as (keyof ListingFilters)[];
     for (const k of keys) {
       const v = listingFilters[k];
-      if (v === undefined || v === "" || k === "city") continue;
+      if (v === undefined || v === "" || k === "city" || k === "state" || k === "zip_code") continue;
       chips.push({ key: k, label: chipLabel(k, v) });
     }
     return chips;
@@ -280,12 +569,12 @@ export default function HomeScreen() {
   }, [draftPriceMin, draftPriceMax, draftAvailableFrom, updateFilter, refetch]);
 
   const markersData = useMemo(
-    () => (listings ?? []).filter((l: any) => l.latitude != null && l.longitude != null),
-    [listings],
+    () => sortedListings.filter((l: any) => l.latitude != null && l.longitude != null),
+    [sortedListings],
   );
 
   const hasActiveFilters = activeChips.length > 0 || !!cityText;
-  const isEmptyResults = !isLoading && !isError && (listings ?? []).length === 0;
+  const isEmptyResults = !isLoading && !isError && sortedListings.length === 0;
   const isFilteredEmpty = isEmptyResults && hasActiveFilters;
 
   /* ================================================================ */
@@ -294,24 +583,19 @@ export default function HomeScreen() {
       {/* ============ Header ============ */}
       <View className="bg-white px-4 pt-6 pb-4">
         <View className="flex-row items-center justify-between mb-5">
-          <View className="flex-row items-center gap-3">
-            <View className="flex-row flex-wrap w-10 h-10 bg-[#065f46] rounded-xl p-1.5 items-center justify-center">
-              <View className="w-full items-center mb-0.5">
-                <View style={{ width: 0, height: 0, borderLeftWidth: 10, borderRightWidth: 10, borderBottomWidth: 10, borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomColor: "white" }} />
-              </View>
-              <View className="flex-row gap-0.5">
-                <View className="w-2.5 h-2.5 bg-white rounded-sm" />
-                <View className="w-2.5 h-2.5 bg-white rounded-sm" />
-              </View>
-              <View className="flex-row gap-0.5 mt-0.5">
-                <View className="w-2.5 h-2.5 bg-white rounded-sm" />
-                <View className="w-2.5 h-2.5 bg-white rounded-sm" />
-              </View>
-            </View>
-            <View>
-              <Text className="text-[22px] font-black text-slate-900 tracking-tight">urbanhut</Text>
-              <Text className="text-[#10b981] text-[11px] font-bold tracking-widest uppercase -mt-1">find your next home</Text>
-            </View>
+          <View className="items-start">
+            <Image
+              source={URBAN_HUT_LOGO}
+              resizeMode="contain"
+              className="w-[170px] h-[44px]"
+              style={{ width: 170, height: 44 }}
+            />
+            <Text
+              className="self-end text-[#10b981] text-[10px] font-bold tracking-widest uppercase -mt-1"
+              style={{ alignSelf: "flex-end", color: "#10b981", fontSize: 10, fontWeight: "700", marginTop: -4, textTransform: "uppercase" }}
+            >
+              find your next home
+            </Text>
           </View>
           
           <View className="flex-row items-center gap-3">
@@ -329,34 +613,109 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* Search & Action Row */}
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity 
-            className="flex-1 flex-row items-center bg-white border border-slate-200 rounded-2xl px-4 py-3 h-[72px]"
-            onPress={openFilters}
-          >
-            <Feather name="map-pin" size={20} color="#10b981" />
-            <View className="ml-3 flex-1">
-              <Text className="text-slate-900 font-bold text-base">{listingFilters.city || "Jersey City, NJ"}</Text>
-              <Text className="text-[#10b981] text-xs font-semibold">{listingFilters.city ? "Current search" : "Current location"}</Text>
+        {/* Search & Actions */}
+        <View className="flex-row items-center gap-2" style={{ zIndex: 30 }}>
+          <View className="flex-1" style={{ zIndex: 40 }}>
+            <View
+              className="flex-row items-center bg-white border border-slate-200 rounded-2xl pl-3 pr-2 h-[58px]"
+              style={{ shadowColor: "#0f172a", shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 6 } }}
+            >
+              <View className="w-9 h-9 rounded-full bg-emerald-50 items-center justify-center">
+                <Feather name="search" size={18} color="#10b981" />
+              </View>
+              <View className="ml-3 flex-1">
+                <Text className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Search location</Text>
+                <TextInput
+                  value={cityText}
+                  onChangeText={handleCityChange}
+                  onFocus={() => setCityFocused(true)}
+                  onSubmitEditing={handleCitySubmit}
+                  returnKeyType="search"
+                  placeholder={locating ? "Detecting city..." : "City, state, or ZIP"}
+                  placeholderTextColor="#94a3b8"
+                  className="text-slate-900 font-extrabold text-[15px] p-0"
+                  style={{ padding: 0, minWidth: 0, lineHeight: 19 }}
+                />
+              </View>
+
+              {!!cityText && (
+                <TouchableOpacity
+                  onPress={handleClearCity}
+                  className="w-8 h-8 rounded-full bg-slate-100 items-center justify-center mr-1"
+                  activeOpacity={0.8}
+                >
+                  <Feather name="x" size={15} color="#475569" />
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                onPress={handleUseCurrentLocation}
+                disabled={locating}
+                className="w-8 h-8 rounded-full bg-emerald-50 items-center justify-center"
+                activeOpacity={0.8}
+              >
+                {locating ? (
+                  <ActivityIndicator size="small" color="#10b981" />
+                ) : (
+                  <Feather name="navigation" size={15} color="#10b981" />
+                )}
+              </TouchableOpacity>
             </View>
-            <Feather name="compass" size={18} color="#10b981" />
-          </TouchableOpacity>
+
+            {locationSuggestions.length > 0 && (
+              <View
+                className="absolute left-0 right-0 bg-white border border-slate-200 rounded-2xl shadow-lg overflow-hidden"
+                style={{ top: 66, zIndex: 50, shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } }}
+              >
+                {locationSuggestions.map((suggestion) => (
+                  <TouchableOpacity
+                    key={suggestion.id}
+                    onPress={() => applyCity(suggestion.label, suggestion)}
+                    className="flex-row items-center px-4 py-3 border-b border-slate-100"
+                    activeOpacity={0.85}
+                  >
+                    <View className="w-8 h-8 rounded-full bg-emerald-50 items-center justify-center">
+                      <Feather name="map-pin" size={15} color="#10b981" />
+                    </View>
+                    <View className="ml-3 flex-1">
+                      <Text className="text-slate-900 text-sm font-bold">{suggestion.label}</Text>
+                      <Text className="text-slate-500 text-xs">
+                        {[suggestion.country, suggestion.zipCode ? "ZIP match" : "Area match"].filter(Boolean).join(" · ")}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {cityFocused && cityText.trim().length >= 2 && locationSuggestions.length === 0 && !suggestionsLoading && (
+              <View
+                className="absolute left-0 right-0 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-lg"
+                style={{ top: 66, zIndex: 50, shadowColor: "#0f172a", shadowOpacity: 0.12, shadowRadius: 14, shadowOffset: { width: 0, height: 8 } }}
+              >
+                <Text className="text-slate-500 text-sm font-medium">
+                  {suggestionsError ? "Location lookup unavailable" : "No location suggestions found"}
+                </Text>
+              </View>
+            )}
+          </View>
 
           <TouchableOpacity
-            className="bg-white border border-slate-200 rounded-2xl w-[72px] h-[72px] items-center justify-center"
+            className="bg-white border border-slate-200 rounded-2xl w-[58px] h-[58px] items-center justify-center"
             onPress={() => setViewMode(viewMode === "list" ? "map" : "list")}
+            activeOpacity={0.85}
           >
-            <Feather name={viewMode === "list" ? "map" : "list"} size={22} color="#0f172a" />
-            <Text className="text-[10px] font-bold text-slate-500 mt-1 uppercase">{viewMode === "list" ? "Map" : "List"}</Text>
+            <Feather name={viewMode === "list" ? "map" : "list"} size={21} color="#0f172a" />
+            <Text className="text-[10px] font-bold text-slate-500 mt-1">{viewMode === "list" ? "Map" : "List"}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            className="bg-white border border-slate-200 rounded-2xl w-[72px] h-[72px] items-center justify-center" 
+            className="bg-white border border-slate-200 rounded-2xl w-[58px] h-[58px] items-center justify-center" 
             onPress={openFilters}
+            activeOpacity={0.85}
           >
-            <Feather name="sliders" size={22} color="#0f172a" />
-            <Text className="text-[10px] font-bold text-slate-500 mt-1 uppercase">Filters</Text>
+            <Feather name="sliders" size={21} color="#0f172a" />
+            <Text className="text-[10px] font-bold text-slate-500 mt-1">Filter</Text>
             {activeChips.length > 0 && (
               <View className="absolute top-1 right-1 w-5 h-5 bg-[#10b981] rounded-full items-center justify-center border-2 border-white">
                 <Text className="text-white text-[10px] font-bold">{activeChips.length}</Text>
@@ -368,10 +727,16 @@ export default function HomeScreen() {
         {/* List Header Info */}
         <View className="flex-row items-center justify-between mt-5">
           <Text className="text-slate-500 text-base font-medium">
-            {(listings || []).length} listings found
+            {sortedListings.length} listings found
           </Text>
-          <TouchableOpacity className="flex-row items-center gap-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5">
-            <Text className="text-slate-600 text-xs font-bold uppercase tracking-wider">Sort: Recommended</Text>
+          <TouchableOpacity
+            className="flex-row items-center gap-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5"
+            onPress={() => setSortVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Text className="text-slate-600 text-xs font-bold uppercase tracking-wider">
+              Sort: {selectedSortOption.label}
+            </Text>
             <Feather name="chevron-down" size={14} color="#64748b" />
           </TouchableOpacity>
         </View>
@@ -424,7 +789,7 @@ export default function HomeScreen() {
         </View>
       ) : viewMode === "list" ? (
         <FlatList
-          data={listings || []}
+          data={sortedListings}
           keyExtractor={(item: any) => item.id}
           renderItem={({ item }: { item: any }) => <ListingCard listing={item} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
@@ -434,7 +799,7 @@ export default function HomeScreen() {
             <View>
               <OnboardingChecklist />
               {/* Smart insight cards */}
-              <ScrollView
+              {/* <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 className="mb-5"
@@ -443,13 +808,7 @@ export default function HomeScreen() {
                 {INSIGHT_CARDS.map(({ key, ...cardProps }) => (
                   <InsightCard key={key} {...cardProps} />
                 ))}
-              </ScrollView>
-
-              {!isFilteredEmpty && (
-                <Text className="text-slate-500 text-sm mb-3">
-                  {(listings || []).length} listing{(listings || []).length !== 1 ? "s" : ""} found
-                </Text>
-              )}
+              </ScrollView> */}
             </View>
           }
           ListEmptyComponent={
@@ -494,6 +853,41 @@ export default function HomeScreen() {
           <Feather name="plus" size={26} color="#fff" />
         </TouchableOpacity>
       )}
+
+      {/* ============ Sort Sheet ============ */}
+      <Modal
+        visible={sortVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortVisible(false)}
+      >
+        <View className="flex-1 justify-end bg-black/30">
+          <TouchableOpacity className="absolute inset-0" activeOpacity={1} onPress={() => setSortVisible(false)} />
+          <View className="bg-white rounded-t-3xl px-5 pt-5 pb-8">
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-lg font-bold text-slate-900">Sort listings</Text>
+              <TouchableOpacity onPress={() => setSortVisible(false)}>
+                <Feather name="x" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+            {SORT_OPTIONS.map((opt) => {
+              const active = selectedSort === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  onPress={() => applySort(opt.value)}
+                  className="flex-row items-center justify-between py-4 border-b border-slate-100"
+                >
+                  <Text className={`text-base font-semibold ${active ? "text-[#10b981]" : "text-slate-700"}`}>
+                    {opt.label}
+                  </Text>
+                  {active && <Feather name="check" size={20} color="#10b981" />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
 
       {/* ============ Filter Modal ============ */}
       <Modal
@@ -602,11 +996,11 @@ export default function HomeScreen() {
               <Text className="text-sm font-semibold text-slate-700 mt-5 mb-2">Sort By</Text>
               <View className="flex-row flex-wrap gap-2">
                 {SORT_OPTIONS.map((opt) => {
-                  const active = listingFilters.sort_by === opt.value;
+                  const active = selectedSort === opt.value;
                   return (
                     <TouchableOpacity
                       key={opt.value}
-                      onPress={() => updateFilter("sort_by", active ? undefined : opt.value)}
+                      onPress={() => updateFilter("sort_by", opt.value === "relevance" ? undefined : opt.value)}
                       className={`rounded-full px-3.5 py-2 border ${active ? "bg-[#10b981] border-[#10b981]" : "bg-white border-slate-200"}`}
                     >
                       <Text className={`text-sm font-medium ${active ? "text-white" : "text-slate-700"}`}>{opt.label}</Text>

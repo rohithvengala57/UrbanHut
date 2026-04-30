@@ -1,10 +1,12 @@
 import { router } from "expo-router";
 import React from "react";
-import { Text, View } from "react-native";
+import { Image, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { OnboardingWrapper } from "@/components/ui/OnboardingWrapper";
 import { useAuthStore } from "@/stores/authStore";
+
+const URBAN_HUT_LOGO = require("@/assets/urban-hut-mark.png");
 
 export default function WelcomeScreen() {
   const user = useAuthStore((s) => s.user);
@@ -19,9 +21,12 @@ export default function WelcomeScreen() {
       onContinue={() => router.push("/onboarding/intent")}
     >
       <View className="flex-1 items-center justify-center">
-        <View className="w-48 h-48 bg-primary-50 rounded-full items-center justify-center mb-8">
-          <Feather name="home" size={80} color="#0ea5e9" />
-        </View>
+        <Image
+          source={URBAN_HUT_LOGO}
+          resizeMode="contain"
+          className="mb-8"
+          style={{ width: 192, height: 192 }}
+        />
         <View className="gap-4">
           <View className="flex-row items-center gap-3">
             <View className="w-8 h-8 bg-accent-100 rounded-full items-center justify-center">

@@ -63,7 +63,7 @@ function RootLayoutInner() {
   if (isLoading) return null;
 
   return (
-    <View className="flex-1">
+    <>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
@@ -89,7 +89,7 @@ function RootLayoutInner() {
           <Text className="text-amber-900 text-xs font-medium">{apiWarning}</Text>
         </View>
       )}
-    </View>
+    </>
   );
 }
 

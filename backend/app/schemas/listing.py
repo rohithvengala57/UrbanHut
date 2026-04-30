@@ -156,6 +156,7 @@ class ListingMetricsResponse(BaseModel):
 class ListingSearchParams(BaseModel):
     city: str | None = None
     state: str | None = None
+    zip_code: str | None = None
     price_min: int | None = None
     price_max: int | None = None
     room_type: str | None = None

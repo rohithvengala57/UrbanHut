@@ -28,7 +28,13 @@ async def seed_telemetry():
             {"source": "direct", "medium": "none", "campaign": "(not_set)"}
         ]
 
-        cities = ["Jersey City", "New York", "Hoboken"]
+        locations = [
+            {"city": "Jersey City", "state": "NJ", "zip_code": "07302"},
+            {"city": "Jersey City", "state": "NJ", "zip_code": "07306"},
+            {"city": "Hoboken", "state": "NJ", "zip_code": "07030"},
+            {"city": "New York", "state": "NY", "zip_code": "10005"},
+            {"city": "New York", "state": "NY", "zip_code": "10001"},
+        ]
 
         # Today's simulated traffic (April 27, 2026)
         # We want to hit some targets: 400 visitors, 70 signups for the week.
@@ -36,7 +42,8 @@ async def seed_telemetry():
         
         for i in range(100):
             channel = random.choice(channels)
-            city = random.choice(cities)
+            location = random.choice(locations)
+            city = location["city"]
             ts = now - timedelta(minutes=random.randint(0, 480)) # last 8 hours
             
             # Visitor
@@ -50,7 +57,7 @@ async def seed_telemetry():
                 utm_medium=channel["medium"],
                 utm_campaign=channel["campaign"],
                 city=city,
-                properties={"city": city}
+                properties=location
             ))
 
             # 20% conversion to signup
@@ -68,7 +75,7 @@ async def seed_telemetry():
                     utm_medium=channel["medium"],
                     utm_campaign=channel["campaign"],
                     city=city,
-                    properties={"method": "email_password"}
+                    properties={"method": "email_password", **location}
                 ))
 
                 # 50% activation
@@ -85,7 +92,7 @@ async def seed_telemetry():
                         utm_medium=channel["medium"],
                         utm_campaign=channel["campaign"],
                         city=city,
-                        properties={"room_id": str(uuid.uuid4())}
+                        properties={"room_id": str(uuid.uuid4()), **location}
                     ))
 
         db.add_all(events)

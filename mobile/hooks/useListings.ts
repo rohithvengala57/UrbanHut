@@ -10,6 +10,8 @@ export function useListings(filters: ListingFilters = {}) {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.city) params.append("city", filters.city);
+      if (filters.state) params.append("state", filters.state);
+      if (filters.zip_code) params.append("zip_code", filters.zip_code);
       if (filters.price_min) params.append("price_min", String(filters.price_min));
       if (filters.price_max) params.append("price_max", String(filters.price_max));
       if (filters.room_type) params.append("room_type", filters.room_type);

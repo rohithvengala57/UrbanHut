@@ -5,6 +5,7 @@ import {
   Image,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -16,27 +17,36 @@ import { Button } from "@/components/ui/Button";
 import { GradientCard } from "@/components/ui/GradientCard";
 
 const { width } = Dimensions.get("window");
+const URBAN_HUT_LOGO = require("@/assets/urban-hut-mark.png");
 
 export default function LandingScreen() {
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+    <SafeAreaView className="flex-1 bg-white" style={styles.screen}>
+      <ScrollView
+        className="flex-1"
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* --- Hero Section --- */}
-        <View className="px-6 pt-12 pb-16 items-center">
-          <View className="w-16 h-16 bg-primary-500 rounded-3xl items-center justify-center mb-6 shadow-xl">
-            <Feather name="home" size={32} color="#fff" />
-          </View>
+        <View className="px-6 pt-12 pb-16 items-center" style={styles.hero}>
+          <Image
+            source={URBAN_HUT_LOGO}
+            resizeMode="contain"
+            className="mb-6"
+            style={styles.logo}
+          />
           
-          <Text className="text-4xl font-extrabold text-slate-900 text-center leading-tight">
+          <Text className="text-4xl font-extrabold text-slate-900 text-center leading-tight" style={styles.title}>
             Live Better,{"\n"}
-            <Text className="text-primary-500">Together.</Text>
+            <Text className="text-primary-500" style={styles.titleAccent}>Together.</Text>
           </Text>
           
-          <Text className="text-lg text-slate-500 text-center mt-4 px-4 leading-6">
+          <Text className="text-lg text-slate-500 text-center mt-4 px-4 leading-6" style={styles.subtitle}>
             The all-in-one platform to find compatible roommates, manage shared expenses, and coordinate home life.
           </Text>
 
-          <View className="w-full mt-10 gap-4">
+          <View className="w-full mt-10 gap-4" style={styles.actions}>
             <Button 
               title="Get Started" 
               size="lg" 
@@ -45,8 +55,9 @@ export default function LandingScreen() {
             <TouchableOpacity 
               onPress={() => router.push("/(auth)/login")}
               className="py-4 items-center rounded-2xl border border-slate-200"
+              style={styles.signInButton}
             >
-              <Text className="text-slate-600 font-semibold text-base">Sign In</Text>
+              <Text className="text-slate-600 font-semibold text-base" style={styles.signInText}>Sign In</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -157,7 +168,7 @@ export default function LandingScreen() {
         {/* --- Footer CTA --- */}
         <View className="px-6 pb-20 pt-8 bg-slate-900 items-center">
            <Text className="text-white text-2xl font-bold text-center">
-             Ready to find your{"\n"}dream roommate?
+             Ready to find your{"\n"}right roommate?
            </Text>
            <Text className="text-slate-400 text-center mt-3 mb-10">
              Join Urban Hut today and transform your living experience.
@@ -177,3 +188,62 @@ export default function LandingScreen() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  hero: {
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 48,
+    paddingBottom: 64,
+  },
+  logo: {
+    width: 92,
+    height: 92,
+    marginBottom: 24,
+  },
+  title: {
+    color: "#0f172a",
+    fontSize: 36,
+    fontWeight: "800",
+    lineHeight: 42,
+    textAlign: "center",
+  },
+  titleAccent: {
+    color: "#0ea5e9",
+  },
+  subtitle: {
+    color: "#64748b",
+    fontSize: 18,
+    lineHeight: 24,
+    marginTop: 16,
+    paddingHorizontal: 16,
+    textAlign: "center",
+  },
+  actions: {
+    gap: 16,
+    marginTop: 40,
+    width: "100%",
+  },
+  signInButton: {
+    alignItems: "center",
+    borderColor: "#e2e8f0",
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 16,
+  },
+  signInText: {
+    color: "#475569",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+});

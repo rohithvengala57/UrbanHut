@@ -128,6 +128,7 @@ def _relevance_score(
 async def search_listings(
     city: str | None = None,
     state: str | None = None,
+    zip_code: str | None = None,
     price_min: int | None = None,
     price_max: int | None = None,
     room_type: str | None = None,
@@ -150,6 +151,7 @@ async def search_listings(
         "listings_search",
         city=city,
         state=state,
+        zip_code=zip_code,
         price_min=price_min,
         price_max=price_max,
         sort_by=sort_by,
@@ -163,6 +165,8 @@ async def search_listings(
         query = query.where(Listing.city.ilike(f"%{city}%"))
     if state:
         query = query.where(Listing.state.ilike(f"%{state}%"))
+    if zip_code:
+        query = query.where(Listing.zip_code.ilike(f"%{zip_code}%"))
     if price_min is not None:
         query = query.where(Listing.rent_monthly >= price_min)
     if price_max is not None:

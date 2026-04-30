@@ -1066,16 +1066,16 @@ SAVED_LISTINGS = [SavedListing(user_id=uid, listing_id=lid) for uid, lid in _sav
 # ════════════════════════════════════════════════════════════════════════════
 
 SAVED_SEARCHES = [
-    SavedSearch(user_id=user_ids[0], name="JC Private Rooms",      filters={"city": "Jersey City", "room_type": "private_room", "price_max": 150000}, alerts_enabled=True,  last_notified_count=3),
-    SavedSearch(user_id=user_ids[0], name="JC Budget Listings",    filters={"city": "Jersey City", "price_max": 120000},                               alerts_enabled=False, last_notified_count=0),
-    SavedSearch(user_id=user_ids[2], name="NYC Cheap Rooms",        filters={"city": "New York",    "price_max": 100000, "room_type": "shared_room"},   alerts_enabled=True,  last_notified_count=1),
-    SavedSearch(user_id=user_ids[6], name="Veggie-Friendly JC",     filters={"city": "Jersey City", "room_type": "private_room", "price_max": 140000}, alerts_enabled=True,  last_notified_count=5),
-    SavedSearch(user_id=user_ids[6], name="Hoboken Entire Places",  filters={"city": "Hoboken",     "room_type": "entire_place", "price_max": 220000},  alerts_enabled=False, last_notified_count=0),
-    SavedSearch(user_id=user_ids[10], name="JC Budget Under $1K",   filters={"city": "Jersey City", "price_max": 100000, "room_type": "private_room"},  alerts_enabled=True,  last_notified_count=2),
-    SavedSearch(user_id=user_ids[10], name="JC Near PATH Stations", filters={"city": "Jersey City", "price_max": 130000},                               alerts_enabled=True,  last_notified_count=0),
-    SavedSearch(user_id=user_ids[12], name="JC Vegetarian Apts",    filters={"city": "Jersey City", "room_type": "private_room"},                       alerts_enabled=True,  last_notified_count=1),
-    SavedSearch(user_id=user_ids[14], name="NYC Private Rooms",     filters={"city": "New York",    "room_type": "private_room", "price_max": 180000},  alerts_enabled=False, last_notified_count=0),
-    SavedSearch(user_id=user_ids[14], name="FiDi Luxury Listings",  filters={"city": "New York",    "price_min": 180000},                               alerts_enabled=True,  last_notified_count=0),
+    SavedSearch(user_id=user_ids[0], name="JC Private Rooms",      filters={"city": "Jersey City", "state": "NJ", "room_type": "private_room", "price_max": 150000}, alerts_enabled=True,  last_notified_count=3),
+    SavedSearch(user_id=user_ids[0], name="Downtown JC 07302",      filters={"city": "Jersey City", "state": "NJ", "zip_code": "07302", "price_max": 180000},          alerts_enabled=False, last_notified_count=0),
+    SavedSearch(user_id=user_ids[2], name="NYC Cheap Rooms",        filters={"city": "New York",    "state": "NY", "price_max": 100000, "room_type": "shared_room"},   alerts_enabled=True,  last_notified_count=1),
+    SavedSearch(user_id=user_ids[6], name="Veggie-Friendly JC",     filters={"city": "Jersey City", "state": "NJ", "room_type": "private_room", "price_max": 140000}, alerts_enabled=True,  last_notified_count=5),
+    SavedSearch(user_id=user_ids[6], name="Hoboken 07030 Places",   filters={"city": "Hoboken",     "state": "NJ", "zip_code": "07030", "room_type": "entire_place", "price_max": 220000}, alerts_enabled=False, last_notified_count=0),
+    SavedSearch(user_id=user_ids[10], name="JC Budget Under $1K",   filters={"city": "Jersey City", "state": "NJ", "price_max": 100000, "room_type": "private_room"},  alerts_enabled=True,  last_notified_count=2),
+    SavedSearch(user_id=user_ids[10], name="Journal Square 07306",  filters={"city": "Jersey City", "state": "NJ", "zip_code": "07306", "price_max": 130000},          alerts_enabled=True,  last_notified_count=0),
+    SavedSearch(user_id=user_ids[12], name="JC Vegetarian Apts",    filters={"city": "Jersey City", "state": "NJ", "room_type": "private_room"},                       alerts_enabled=True,  last_notified_count=1),
+    SavedSearch(user_id=user_ids[14], name="NYC Private Rooms",     filters={"city": "New York",    "state": "NY", "room_type": "private_room", "price_max": 180000},  alerts_enabled=False, last_notified_count=0),
+    SavedSearch(user_id=user_ids[14], name="FiDi 10005 Luxury",     filters={"city": "New York",    "state": "NY", "zip_code": "10005", "price_min": 180000},          alerts_enabled=True,  last_notified_count=0),
 ]
 
 

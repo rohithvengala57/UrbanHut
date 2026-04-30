@@ -139,6 +139,13 @@ class TestListings:
         assert len(results) >= 1
         assert any(l["city"] == "San Francisco" for l in results)
 
+        # Search by ZIP code
+        resp = await client.get("/api/v1/listings/?zip_code=94103")
+        assert resp.status_code == 200
+        results = resp.json()
+        assert len(results) >= 1
+        assert any(l["zip_code"] == "94103" for l in results)
+
     async def test_update_listing(self, client):
         token = await get_token(client, email="update@test.com")
         headers = {"Authorization": f"Bearer {token}"}

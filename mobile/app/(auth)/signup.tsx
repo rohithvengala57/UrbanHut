@@ -1,8 +1,8 @@
-import { Feather } from "@expo/vector-icons";
 import { Link, router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { trackEvent } from "@/lib/analytics";
 import { useAuthStore } from "@/stores/authStore";
+
+const URBAN_HUT_LOGO = require("@/assets/urban-hut-mark.png");
 
 export default function SignupScreen() {
   const [fullName, setFullName] = useState("");
@@ -79,9 +81,12 @@ export default function SignupScreen() {
           <View className="flex-1 px-6 pt-12 pb-8">
             {/* Header */}
             <View className="items-center mb-8">
-              <View className="w-20 h-20 bg-primary-500 rounded-3xl items-center justify-center mb-4 shadow-lg">
-                <Feather name="user-plus" size={36} color="#fff" />
-              </View>
+              <Image
+                source={URBAN_HUT_LOGO}
+                resizeMode="contain"
+                className="mb-4"
+                style={{ width: 88, height: 88 }}
+              />
               <Text className="text-3xl font-bold text-slate-900">Create Account</Text>
               <Text className="text-slate-500 mt-1 text-base">Join the Urban Hut community</Text>
             </View>
