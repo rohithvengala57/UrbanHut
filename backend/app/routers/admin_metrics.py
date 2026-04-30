@@ -17,6 +17,8 @@ from app.models.analytics import TelemetryEvent
 from app.models.community import CommunityPost, CommunityReply
 from app.models.service_provider import ServiceProvider, ServiceReview
 from app.models.service_booking import ServiceBooking
+from app.models.match import MatchInterest
+from app.models.inquiry import ListingInquiry
 from app.middleware.permissions import require_admin
 
 router = APIRouter()
@@ -575,4 +577,77 @@ async def get_services_analytics(
             }
             for row in demand_rows
         ],
+    }
+
+
+@router.get("/investor-insights")
+async def get_investor_insights(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Return investor-facing revenue, conversion, and expansion metrics."""
+    del admin
+
+    active_listing_filter = Listing.status.in_(["active", "published"])
+
+    active_listings_count = await db.scalar(
+        select(func.count(Listing.id)).where(active_listing_filter)
+    ) or 0
+    active_hosts_count = await db.scalar(
+        select(func.count(func.distinct(Listing.host_id))).where(active_listing_filter)
+    ) or 0
+    total_users = await db.scalar(select(func.count(User.id))) or 0
+
+    # Revenue proxy uses active listing rent until direct billing data is available.
+    total_estimated_revenue = await db.scalar(
+        select(func.coalesce(func.sum(Listing.rent_monthly), 0)).where(active_listing_filter)
+    ) or 0
+    mrr = int(total_estimated_revenue)
+    arpu = round((mrr / active_hosts_count), 2) if active_hosts_count else 0.0
+
+    listing_views = await db.scalar(
+        select(func.count(TelemetryEvent.id)).where(
+            TelemetryEvent.event_name.in_(["listing_viewed", "listing_detail_viewed"])
+        )
+    ) or 0
+    interests_sent = await db.scalar(select(func.count(MatchInterest.id))) or 0
+    inquiries_sent = await db.scalar(select(func.count(ListingInquiry.id))) or 0
+
+    inquiries_or_interests = max(interests_sent, inquiries_sent)
+    conversion_rate = round((inquiries_or_interests / listing_views * 100), 2) if listing_views else 0.0
+    listing_to_interest_rate = round((interests_sent / active_listings_count * 100), 2) if active_listings_count else 0.0
+
+    cities_result = await db.execute(
+        select(Listing.city, func.count(Listing.id).label("listing_count"))
+        .where(active_listing_filter)
+        .group_by(Listing.city)
+        .order_by(desc("listing_count"), Listing.city.asc())
+    )
+    city_rows = cities_result.all()
+
+    markets = [
+        {"city": city, "active_listings": listing_count}
+        for city, listing_count in city_rows
+        if city
+    ]
+
+    return {
+        "revenue": {
+            "total_estimated_revenue": mrr,
+            "mrr": mrr,
+            "arpu": arpu,
+        },
+        "funnel": {
+            "listing_views": listing_views,
+            "interests_sent": interests_sent,
+            "inquiries_sent": inquiries_sent,
+            "conversion_rate": conversion_rate,
+            "listing_to_interest_rate": listing_to_interest_rate,
+        },
+        "geographic_expansion": {
+            "active_markets": len(markets),
+            "top_markets": markets[:5],
+            "total_active_listings": active_listings_count,
+            "total_users": total_users,
+        },
     }
