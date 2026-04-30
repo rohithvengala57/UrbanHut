@@ -1,6 +1,7 @@
 import uuid
 import random
 from datetime import date, timedelta
+from collections import defaultdict
 from typing import Any
 
 import structlog
@@ -17,10 +18,20 @@ from app.models.analytics import TelemetryEvent
 from app.models.community import CommunityPost, CommunityReply
 from app.models.service_provider import ServiceProvider, ServiceReview
 from app.models.service_booking import ServiceBooking
+from app.models.expense import Expense
+from app.models.match import MatchInterest
 from app.middleware.permissions import require_admin
 
 router = APIRouter()
 log = structlog.get_logger("app.routers.admin_metrics")
+
+
+def _month_start(d: date) -> date:
+    return d.replace(day=1)
+
+
+def _month_key(d: date) -> str:
+    return _month_start(d).isoformat()
 
 @router.get("/overview")
 async def get_overview_metrics(
@@ -575,4 +586,131 @@ async def get_services_analytics(
             }
             for row in demand_rows
         ],
+    }
+
+
+@router.get("/investor-insights")
+async def get_investor_insights(
+    days: int = 180,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin)
+):
+    """Investor-oriented revenue, conversion funnel, and geographic expansion metrics."""
+    window_days = max(30, min(days, 365))
+    since = date.today() - timedelta(days=window_days)
+
+    expense_rows = (
+        await db.execute(
+            select(Expense.date, Expense.amount, Expense.paid_by)
+            .where(Expense.date >= since)
+        )
+    ).all()
+    monthly_revenue_cents: dict[str, int] = defaultdict(int)
+    distinct_payers = set()
+    total_revenue_cents = 0
+
+    for row in expense_rows:
+        month = _month_key(row.date)
+        amount = int(row.amount or 0)
+        monthly_revenue_cents[month] += amount
+        total_revenue_cents += amount
+        if row.paid_by:
+            distinct_payers.add(row.paid_by)
+
+    month_buckets = sorted(monthly_revenue_cents.keys())
+    mrr_cents = round(total_revenue_cents / len(month_buckets)) if month_buckets else 0
+    arpu_cents = round(total_revenue_cents / len(distinct_payers)) if distinct_payers else 0
+
+    search_users = await db.scalar(
+        select(func.count(func.distinct(TelemetryEvent.user_id))).where(
+            TelemetryEvent.event_name == "search_performed",
+            TelemetryEvent.event_date >= since,
+            TelemetryEvent.user_id.is_not(None),
+        )
+    )
+    interest_users = await db.scalar(
+        select(func.count(func.distinct(TelemetryEvent.user_id))).where(
+            TelemetryEvent.event_name == "interest_sent",
+            TelemetryEvent.event_date >= since,
+            TelemetryEvent.user_id.is_not(None),
+        )
+    )
+    close_users_events = await db.scalar(
+        select(func.count(func.distinct(TelemetryEvent.user_id))).where(
+            TelemetryEvent.event_name == "match_accepted",
+            TelemetryEvent.event_date >= since,
+            TelemetryEvent.user_id.is_not(None),
+        )
+    )
+    close_users_matches = await db.scalar(
+        select(func.count(func.distinct(MatchInterest.from_user_id))).where(
+            MatchInterest.status == "accepted",
+            func.date(MatchInterest.created_at) >= since,
+        )
+    )
+
+    search_count = int(search_users or 0)
+    interest_count = int(interest_users or 0)
+    close_count = max(int(close_users_events or 0), int(close_users_matches or 0))
+
+    listings_by_city_stmt = (
+        select(Listing.city, func.count(Listing.id).label("supply"))
+        .where(func.date(Listing.created_at) >= since)
+        .group_by(Listing.city)
+    )
+    demand_by_city_stmt = (
+        select(TelemetryEvent.city, func.count(TelemetryEvent.id).label("demand"))
+        .where(
+            TelemetryEvent.event_date >= since,
+            TelemetryEvent.city.is_not(None),
+            TelemetryEvent.event_name.in_(["search_performed", "interest_sent"]),
+        )
+        .group_by(TelemetryEvent.city)
+    )
+
+    listing_rows = (await db.execute(listings_by_city_stmt)).all()
+    demand_rows = (await db.execute(demand_by_city_stmt)).all()
+
+    supply_map = {row.city: int(row.supply or 0) for row in listing_rows if row.city}
+    demand_map = {row.city: int(row.demand or 0) for row in demand_rows if row.city}
+    city_keys = sorted(set(supply_map.keys()) | set(demand_map.keys()))
+
+    return {
+        "window_days": window_days,
+        "revenue": {
+            "total_revenue_cents": total_revenue_cents,
+            "mrr_cents": mrr_cents,
+            "arpu_cents": arpu_cents,
+            "trend": [
+                {"month": month, "revenue_cents": monthly_revenue_cents[month]}
+                for month in month_buckets
+            ],
+        },
+        "conversion": {
+            "search_to_interest_pct": round((interest_count / search_count) * 100, 1) if search_count else 0,
+            "interest_to_close_pct": round((close_count / interest_count) * 100, 1) if interest_count else 0,
+            "funnel": {
+                "search_users": search_count,
+                "interest_users": interest_count,
+                "close_users": close_count,
+            },
+        },
+        "geography": {
+            "city_growth": [
+                {
+                    "city": city,
+                    "new_supply": supply_map.get(city, 0),
+                    "new_demand": demand_map.get(city, 0),
+                }
+                for city in city_keys
+            ],
+            "supply_demand_heatmap": [
+                {
+                    "city": city,
+                    "supply": supply_map.get(city, 0),
+                    "demand": demand_map.get(city, 0),
+                }
+                for city in city_keys
+            ],
+        },
     }
