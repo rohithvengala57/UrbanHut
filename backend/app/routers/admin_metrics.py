@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.listing import Listing
 from app.models.household import Household
 from app.models.analytics import TelemetryEvent
+from app.models.match import MatchInterest
 from app.middleware.permissions import require_admin
 
 router = APIRouter()
@@ -160,5 +161,101 @@ async def get_user_events(
                 "city": event.city
             }
             for event in events
+        ]
+    }
+
+
+@router.get("/users")
+async def get_users_management(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get latest users with lightweight management metadata."""
+    safe_limit = max(1, min(limit, 100))
+    users_result = await db.execute(
+        select(User)
+        .order_by(User.created_at.desc())
+        .limit(safe_limit)
+    )
+    users = list(users_result.scalars().all())
+
+    user_ids = [user.id for user in users]
+    listing_counts: dict[uuid.UUID, int] = {}
+    if user_ids:
+        listing_result = await db.execute(
+            select(Listing.host_id, func.count(Listing.id))
+            .where(Listing.host_id.in_(user_ids))
+            .group_by(Listing.host_id)
+        )
+        listing_counts = {host_id: count for host_id, count in listing_result.all()}
+
+    return {
+        "count": len(users),
+        "users": [
+            {
+                "id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "role": user.role,
+                "status": user.status,
+                "trust_score": float(user.trust_score),
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+                "listing_count": listing_counts.get(user.id, 0),
+            }
+            for user in users
+        ]
+    }
+
+
+@router.get("/listings")
+async def get_listings_management(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Get latest listings with host and demand indicators."""
+    safe_limit = max(1, min(limit, 100))
+    listing_result = await db.execute(
+        select(Listing, User.full_name, User.email)
+        .join(User, User.id == Listing.host_id)
+        .order_by(Listing.created_at.desc())
+        .limit(safe_limit)
+    )
+    rows = listing_result.all()
+    listings = [row[0] for row in rows]
+    listing_ids = [listing.id for listing in listings]
+
+    interest_counts: dict[uuid.UUID, int] = {}
+    if listing_ids:
+        interest_result = await db.execute(
+            select(MatchInterest.to_listing_id, func.count(MatchInterest.id))
+            .where(MatchInterest.to_listing_id.in_(listing_ids))
+            .group_by(MatchInterest.to_listing_id)
+        )
+        interest_counts = {
+            listing_id: count
+            for listing_id, count in interest_result.all()
+            if listing_id is not None
+        }
+
+    return {
+        "count": len(rows),
+        "listings": [
+            {
+                "id": str(listing.id),
+                "title": listing.title,
+                "city": listing.city,
+                "state": listing.state,
+                "status": listing.status,
+                "rent_monthly": listing.rent_monthly,
+                "is_verified": listing.is_verified,
+                "view_count": listing.view_count,
+                "created_at": listing.created_at.isoformat() if listing.created_at else None,
+                "host_name": host_name,
+                "host_email": host_email,
+                "interest_count": interest_counts.get(listing.id, 0),
+            }
+            for listing, host_name, host_email in rows
         ]
     }
