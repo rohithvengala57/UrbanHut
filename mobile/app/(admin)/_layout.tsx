@@ -57,6 +57,13 @@ export default function AdminLayout() {
         }}
       />
       <Tabs.Screen
+        name="analytics"
+        options={{
+          title: "Analytics",
+          tabBarIcon: ({ color, size }) => <Feather name="trending-up" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="users"
         options={{
           title: "Users",
@@ -68,6 +75,27 @@ export default function AdminLayout() {
         options={{
           title: "Listings",
           tabBarIcon: ({ color, size }) => <Feather name="home" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="interests"
+        options={{
+          title: "Interests",
+          tabBarIcon: ({ color, size }) => <Feather name="heart" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, size }) => <Feather name="message-square" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="households"
+        options={{
+          title: "Households",
+          tabBarIcon: ({ color, size }) => <Feather name="layers" size={size} color={color} />,
         }}
       />
       <Tabs.Screen

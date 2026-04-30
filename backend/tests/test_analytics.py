@@ -11,6 +11,10 @@ from app.database import Base, get_db
 from app.main import app
 from app.models.user import User
 from app.models.analytics import TelemetryEvent, UserAttribution
+from app.models.community import CommunityPost, CommunityReply
+from app.models.service_provider import ServiceProvider
+from app.models.service_booking import ServiceBooking
+from app.models.household import Household
 from app.services.analytics import record_event, track_backend_event
 
 @pytest.fixture(scope="session")
@@ -174,3 +178,154 @@ class TestAdminAnalytics:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["rows"]) >= 1
+
+    async def test_weekly_retention(self, client, db_session):
+        today = datetime.now(timezone.utc)
+        signup_day = today - timedelta(days=15)
+
+        user_a = await create_test_user(db_session, "retention_a@test.com")
+        user_b = await create_test_user(db_session, "retention_b@test.com")
+
+        await record_event(
+            db_session,
+            event_name="signup_completed",
+            user_id=user_a.id,
+            occurred_at=signup_day,
+            source="web",
+            properties={"source": "google"},
+        )
+        await record_event(
+            db_session,
+            event_name="signup_completed",
+            user_id=user_b.id,
+            occurred_at=signup_day,
+            source="web",
+            properties={"source": "google"},
+        )
+
+        # User A retained in week 1 and week 2; User B retained in week 1 only.
+        await record_event(
+            db_session,
+            event_name="chat_message_sent",
+            user_id=user_a.id,
+            occurred_at=signup_day + timedelta(days=8),
+            source="web",
+        )
+        await record_event(
+            db_session,
+            event_name="expense_created",
+            user_id=user_a.id,
+            occurred_at=signup_day + timedelta(days=14),
+            source="web",
+        )
+        await record_event(
+            db_session,
+            event_name="chat_message_sent",
+            user_id=user_b.id,
+            occurred_at=signup_day + timedelta(days=8),
+            source="web",
+        )
+        await db_session.commit()
+
+        resp = await client.get("/api/v1/telemetry/retention/weekly?cohort_weeks=8&max_age_weeks=2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["rows"]
+
+        cohort = data["rows"][0]
+        assert cohort["channel"] == "google"
+        assert cohort["cohort_size"] == 2
+        assert cohort["retention"][0]["retained_users"] == 2
+        assert cohort["retention"][1]["retained_users"] == 2
+        assert cohort["retention"][2]["retained_users"] == 1
+        assert cohort["retention"][2]["retention_pct"] == 50.0
+
+    async def test_community_analytics(self, client, db_session):
+        admin = await create_test_user(db_session, "admin-community@test.com", role="admin")
+        author = await create_test_user(db_session, "author@test.com")
+        replier = await create_test_user(db_session, "replier@test.com")
+
+        post = CommunityPost(
+            author_id=author.id,
+            city="San Francisco",
+            type="tip",
+            title="Great neighborhood",
+            body="Detailed guide to local commute options.",
+            upvotes=3,
+            reply_count=1,
+        )
+        db_session.add(post)
+        await db_session.flush()
+        db_session.add(
+            CommunityReply(
+                post_id=post.id,
+                author_id=replier.id,
+                body="Very helpful tip, thanks!",
+                upvotes=1,
+            )
+        )
+        await db_session.commit()
+
+        from app.utils.security import create_access_token
+        token = create_access_token({"sub": str(admin.id)})
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = await client.get("/api/v1/admin/metrics/community-analytics?days=30", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["metrics"]["total_posts"] == 1
+        assert data["metrics"]["total_replies"] == 1
+        assert data["metrics"]["new_posts"] == 1
+        assert data["metrics"]["new_replies"] == 1
+        assert data["metrics"]["active_contributors"] >= 2
+        assert data["top_cities"][0]["city"] == "San Francisco"
+
+    async def test_services_analytics_and_household_services_adoption(self, client, db_session):
+        admin = await create_test_user(db_session, "admin-services@test.com", role="admin")
+        user = await create_test_user(db_session, "services-user@test.com")
+
+        household = Household(name="Svc Home", admin_id=user.id, status="active")
+        db_session.add(household)
+        await db_session.flush()
+        user.household_id = household.id
+
+        provider = ServiceProvider(
+            name="Handy Pro",
+            category="plumbing",
+            city="San Francisco",
+            state="CA",
+            verified=True,
+            rating=4.5,
+            review_count=0,
+        )
+        db_session.add(provider)
+        await db_session.flush()
+
+        booking = ServiceBooking(
+            user_id=user.id,
+            provider_id=provider.id,
+            scheduled_date=date.today(),
+            time_slot="10:00",
+            status="completed",
+        )
+        db_session.add(booking)
+        await db_session.commit()
+
+        from app.utils.security import create_access_token
+        token = create_access_token({"sub": str(admin.id)})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        services_resp = await client.get("/api/v1/admin/metrics/services-analytics?days=30", headers=headers)
+        assert services_resp.status_code == 200
+        services_data = services_resp.json()
+        assert services_data["metrics"]["total_providers"] == 1
+        assert services_data["metrics"]["verified_providers"] == 1
+        assert services_data["metrics"]["new_bookings"] == 1
+        assert services_data["metrics"]["completed_bookings"] == 1
+        assert services_data["metrics"]["completion_rate"] == 100.0
+        assert services_data["category_demand"][0]["category"] == "plumbing"
+
+        household_resp = await client.get("/api/v1/admin/metrics/household-analytics", headers=headers)
+        assert household_resp.status_code == 200
+        household_data = household_resp.json()
+        services_bar = next(row for row in household_data["feature_adoption"] if row["label"] == "Services Used")
+        assert services_bar["count"] == 1
