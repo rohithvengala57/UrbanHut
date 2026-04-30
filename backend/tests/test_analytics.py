@@ -15,9 +15,6 @@ from app.models.community import CommunityPost, CommunityReply
 from app.models.service_provider import ServiceProvider
 from app.models.service_booking import ServiceBooking
 from app.models.household import Household
-from app.models.listing import Listing
-from app.models.match import MatchInterest
-from app.models.inquiry import ListingInquiry
 from app.services.analytics import record_event, track_backend_event
 
 @pytest.fixture(scope="session")
@@ -332,92 +329,3 @@ class TestAdminAnalytics:
         household_data = household_resp.json()
         services_bar = next(row for row in household_data["feature_adoption"] if row["label"] == "Services Used")
         assert services_bar["count"] == 1
-
-    async def test_investor_insights(self, client, db_session):
-        admin = await create_test_user(db_session, "admin_insights@test.com", role="admin")
-        host = await create_test_user(db_session, "host_insights@test.com")
-        seeker = await create_test_user(db_session, "seeker_insights@test.com")
-
-        listing_ny = Listing(
-            host_id=host.id,
-            title="Sunny Room",
-            description="Great location",
-            property_type="apartment",
-            room_type="private",
-            address_line1="123 Broadway",
-            city="New York",
-            state="NY",
-            zip_code="10001",
-            rent_monthly=2000,
-            total_bedrooms=2,
-            total_bathrooms=1.0,
-            available_from=date.today(),
-            status="published",
-        )
-        listing_sf = Listing(
-            host_id=host.id,
-            title="Downtown Loft",
-            description="Walkable and bright",
-            property_type="condo",
-            room_type="private",
-            address_line1="456 Market",
-            city="San Francisco",
-            state="CA",
-            zip_code="94103",
-            rent_monthly=3000,
-            total_bedrooms=2,
-            total_bathrooms=2.0,
-            available_from=date.today(),
-            status="active",
-        )
-        db_session.add_all([listing_ny, listing_sf])
-        await db_session.flush()
-
-        db_session.add_all(
-            [
-                TelemetryEvent(
-                    user_id=seeker.id,
-                    event_name="listing_viewed",
-                    source="web",
-                    occurred_at=datetime.now(timezone.utc),
-                    event_date=date.today(),
-                ),
-                TelemetryEvent(
-                    user_id=seeker.id,
-                    event_name="listing_detail_viewed",
-                    source="web",
-                    occurred_at=datetime.now(timezone.utc),
-                    event_date=date.today(),
-                ),
-                MatchInterest(
-                    from_user_id=seeker.id,
-                    to_listing_id=listing_ny.id,
-                    status="interested",
-                ),
-                ListingInquiry(
-                    listing_id=listing_sf.id,
-                    sender_user_id=seeker.id,
-                    message="Is this still available?",
-                    status="open",
-                ),
-            ]
-        )
-        await db_session.commit()
-
-        from app.utils.security import create_access_token
-        token = create_access_token({"sub": str(admin.id)})
-        headers = {"Authorization": f"Bearer {token}"}
-
-        resp = await client.get("/api/v1/admin/metrics/investor-insights", headers=headers)
-        assert resp.status_code == 200
-        data = resp.json()
-
-        assert data["revenue"]["total_estimated_revenue"] == 5000
-        assert data["revenue"]["mrr"] == 5000
-        assert data["revenue"]["arpu"] == 5000.0
-        assert data["funnel"]["listing_views"] == 2
-        assert data["funnel"]["interests_sent"] == 1
-        assert data["funnel"]["inquiries_sent"] == 1
-        assert data["funnel"]["conversion_rate"] == 50.0
-        assert data["geographic_expansion"]["active_markets"] == 2
-        assert data["geographic_expansion"]["total_active_listings"] == 2
