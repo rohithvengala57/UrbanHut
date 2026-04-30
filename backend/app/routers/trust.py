@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,9 +11,28 @@ from app.models.match import Vouch
 from app.models.trust_score import TrustEvent, TrustSnapshot
 from app.models.user import User
 from app.schemas.trust import TrustActivityItem, TrustEventResponse, TrustScoreResponse, VouchCreate, VouchResponse
+from app.services.analytics import track_backend_event
 from app.services.trust_engine import TrustEngine
 
 router = APIRouter()
+_bearer = HTTPBearer(auto_error=False)
+
+
+async def _get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not credentials:
+        return None
+    from app.utils.security import decode_token
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access":
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    return result.scalar_one_or_none()
 
 
 EVENT_TITLES = {
@@ -108,6 +128,14 @@ async def get_my_trust_score(
     engine = TrustEngine(db)
     snapshot = await engine.calculate(current_user.id)
     extras = await _build_score_extras(current_user.id, snapshot, db)
+
+    await track_backend_event(
+        db,
+        event_name="trust_score_viewed",
+        user_id=current_user.id,
+        properties={"target_user_id": str(current_user.id), "is_self": True},
+    )
+
     return TrustScoreResponse(
         total_score=float(snapshot.total_score),
         verification_score=float(snapshot.verification_score),
@@ -126,6 +154,7 @@ async def get_my_trust_score(
 async def get_user_trust_score(
     user_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(_get_optional_user),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
@@ -135,6 +164,14 @@ async def get_user_trust_score(
     engine = TrustEngine(db)
     snapshot = await engine.calculate(user_id)
     extras = await _build_score_extras(user_id, snapshot, db)
+
+    await track_backend_event(
+        db,
+        event_name="trust_score_viewed",
+        user_id=current_user.id if current_user else None,
+        properties={"target_user_id": str(user_id), "is_self": current_user.id == user_id if current_user else False},
+    )
+
     return TrustScoreResponse(
         total_score=float(snapshot.total_score),
         verification_score=float(snapshot.verification_score),

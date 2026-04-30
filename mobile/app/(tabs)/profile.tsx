@@ -290,6 +290,7 @@ export default function ProfileScreen() {
         <Card className="mb-4">
           <Text className="font-bold text-slate-900 text-lg mb-3">Quick Access</Text>
           {[
+            ...(user.role === "admin" ? [{ label: "Admin Dashboard", icon: "shield-off" as const, route: "/(admin)/index", color: "#6366f1" }] : []),
             { label: "Saved Listings", icon: "bookmark" as const, route: "/saved/index", color: "#0ea5e9" },
             { label: "Messages", icon: "message-circle" as const, route: "/chat/index", color: "#22c55e" },
             { label: "My Listings", icon: "layers" as const, route: "/listing/my-listings", color: "#f59e0b" },

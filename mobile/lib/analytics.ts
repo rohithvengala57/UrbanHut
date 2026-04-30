@@ -4,14 +4,19 @@ import { getItem, setItem } from "@/lib/storage";
 import api from "@/services/api";
 
 export type Track2EventName =
+  | "app_opened"
   | "landing_page_viewed"
   | "signup_started"
   | "signup_completed"
+  | "login_completed"
   | "profile_completed"
   | "verification_started"
   | "verification_submitted"
   | "listing_created"
   | "listing_published"
+  | "listing_viewed"
+  | "search_performed"
+  | "saved_listing_added"
   | "interest_sent"
   | "mutual_match_created"
   | "chat_room_created"
@@ -19,7 +24,10 @@ export type Track2EventName =
   | "household_created"
   | "household_member_joined"
   | "expense_created"
-  | "chore_completed";
+  | "chore_completed"
+  | "service_provider_viewed"
+  | "service_booking_created"
+  | "trust_score_viewed";
 
 type Attribution = {
   source?: string;

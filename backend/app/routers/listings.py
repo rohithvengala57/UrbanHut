@@ -159,6 +159,20 @@ async def search_listings(
         per_page=per_page,
         authenticated=current_user is not None,
     )
+    await track_backend_event(
+        db,
+        event_name="search_performed",
+        user_id=current_user.id if current_user else None,
+        properties={
+            "city": city,
+            "state": state,
+            "price_min": price_min,
+            "price_max": price_max,
+            "room_type": room_type,
+            "property_type": property_type,
+            "sort_by": sort_by,
+        },
+    )
     query = select(Listing).where(Listing.status == "active")
 
     if city:
@@ -381,13 +395,23 @@ async def nearby_count(
 
 # ─── Single listing (public) ─────────────────────────────────────────────────
 @router.get("/{listing_id}", response_model=ListingResponse)
-async def get_listing(listing_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_listing(
+    listing_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(_get_optional_user),
+):
     result = await db.execute(select(Listing).where(Listing.id == listing_id))
     listing = result.scalar_one_or_none()
     if not listing:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Listing not found")
 
     listing.view_count += 1
+    await track_backend_event(
+        db,
+        event_name="listing_viewed",
+        user_id=current_user.id if current_user else None,
+        properties={"listing_id": str(listing_id), "city": listing.city, "rent": listing.rent_monthly},
+    )
 
     response = ListingResponse.model_validate(listing)
 

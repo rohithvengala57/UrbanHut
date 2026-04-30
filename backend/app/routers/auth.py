@@ -287,6 +287,17 @@ async def login(data: UserLogin, request: Request, db: AsyncSession = Depends(ge
 
     await _store_refresh_token(db, user.id, refresh_token_raw, request)
 
+    await track_backend_event(
+        db,
+        event_name="login_completed",
+        user_id=user.id,
+        source="backend",
+        properties={
+            "client_ip": request.client.host if request.client else "unknown",
+            "user_agent": request.headers.get("user-agent", "")[:120],
+        },
+    )
+
     log.info(
         "login_success",
         user_id=str(user.id),

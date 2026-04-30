@@ -11,8 +11,28 @@ from app.middleware.auth import get_current_user
 from app.models.service_booking import ServiceBooking
 from app.models.service_provider import ServiceProvider, ServiceReview
 from app.models.user import User
+from app.services.analytics import track_backend_event
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 router = APIRouter()
+_bearer = HTTPBearer(auto_error=False)
+
+
+async def _get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not credentials:
+        return None
+    from app.utils.security import decode_token
+    payload = decode_token(credentials.credentials)
+    if not payload or payload.get("type") != "access":
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    return result.scalar_one_or_none()
 
 
 # ─── UH-801/UH-802: Booking schemas ──────────────────────────────────────────
@@ -89,11 +109,22 @@ async def search_providers(
 
 
 @router.get("/providers/{provider_id}")
-async def get_provider(provider_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_provider(
+    provider_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(_get_optional_user),
+):
     result = await db.execute(select(ServiceProvider).where(ServiceProvider.id == provider_id))
     provider = result.scalar_one_or_none()
     if not provider:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
+
+    await track_backend_event(
+        db,
+        event_name="service_provider_viewed",
+        user_id=current_user.id if current_user else None,
+        properties={"provider_id": str(provider_id), "category": provider.category, "city": provider.city},
+    )
 
     reviews_result = await db.execute(
         select(ServiceReview)
@@ -186,6 +217,16 @@ async def create_booking(
         status="pending",
     )
     db.add(booking)
+    await track_backend_event(
+        db,
+        event_name="service_booking_created",
+        user_id=current_user.id,
+        properties={
+            "booking_id": str(booking.id),
+            "provider_id": str(data.provider_id),
+            "category": provider.category,
+        },
+    )
     await db.flush()
     await db.refresh(booking)
     return _booking_dict(booking, provider.name)

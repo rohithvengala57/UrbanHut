@@ -17,6 +17,7 @@ from app.schemas.saved import (
     SavedSearchResponse,
     SavedSearchUpdate,
 )
+from app.services.analytics import track_backend_event
 
 router = APIRouter()
 
@@ -138,6 +139,12 @@ async def save_listing(
 
     saved = SavedListing(user_id=current_user.id, listing_id=listing_id)
     db.add(saved)
+    await track_backend_event(
+        db,
+        event_name="saved_listing_added",
+        user_id=current_user.id,
+        properties={"listing_id": str(listing_id)},
+    )
     await db.flush()
     await db.refresh(saved)
     return saved

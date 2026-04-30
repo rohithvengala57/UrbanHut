@@ -20,13 +20,18 @@ _bearer = HTTPBearer(auto_error=False)
 
 Track2EventName = Literal[
     "landing_page_viewed",
+    "app_opened",
     "signup_started",
     "signup_completed",
+    "login_completed",
     "profile_completed",
     "verification_started",
     "verification_submitted",
     "listing_created",
     "listing_published",
+    "listing_viewed",
+    "search_performed",
+    "saved_listing_added",
     "interest_sent",
     "mutual_match_created",
     "chat_room_created",
@@ -35,6 +40,9 @@ Track2EventName = Literal[
     "household_member_joined",
     "expense_created",
     "chore_completed",
+    "service_provider_viewed",
+    "service_booking_created",
+    "trust_score_viewed",
 ]
 
 REQUIRED_PROPERTIES: dict[str, set[str]] = {
@@ -43,6 +51,7 @@ REQUIRED_PROPERTIES: dict[str, set[str]] = {
     "verification_submitted": {"verification_type"},
     "listing_created": {"listing_id"},
     "listing_published": {"listing_id"},
+    "listing_viewed": {"listing_id"},
     "interest_sent": {"listing_id"},
     "chat_room_created": {"room_id"},
     "chat_message_sent": {"room_id"},
@@ -50,6 +59,9 @@ REQUIRED_PROPERTIES: dict[str, set[str]] = {
     "household_member_joined": {"household_id"},
     "expense_created": {"expense_id"},
     "chore_completed": {"assignment_id"},
+    "saved_listing_added": {"listing_id"},
+    "service_provider_viewed": {"provider_id"},
+    "service_booking_created": {"booking_id"},
 }
 
 
