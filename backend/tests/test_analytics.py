@@ -15,6 +15,9 @@ from app.models.community import CommunityPost, CommunityReply
 from app.models.service_provider import ServiceProvider
 from app.models.service_booking import ServiceBooking
 from app.models.household import Household
+from app.models.listing import Listing
+from app.models.expense import Expense
+from app.models.match import MatchInterest
 from app.services.analytics import record_event, track_backend_event
 
 @pytest.fixture(scope="session")
@@ -329,3 +332,104 @@ class TestAdminAnalytics:
         household_data = household_resp.json()
         services_bar = next(row for row in household_data["feature_adoption"] if row["label"] == "Services Used")
         assert services_bar["count"] == 1
+
+    async def test_investor_insights_revenue_conversion_and_geography(self, client, db_session):
+        admin = await create_test_user(db_session, "admin-investor@test.com", role="admin")
+        seeker = await create_test_user(db_session, "seeker-investor@test.com")
+        host = await create_test_user(db_session, "host-investor@test.com")
+
+        listing = Listing(
+            host_id=host.id,
+            title="Sunny room in SF",
+            description="Walkable neighborhood near transit.",
+            property_type="apartment",
+            room_type="private_room",
+            address_line1="123 Market St",
+            address_line2=None,
+            city="San Francisco",
+            state="CA",
+            zip_code="94103",
+            latitude=37.7749,
+            longitude=-122.4194,
+            rent_monthly=180000,
+            security_deposit=180000,
+            utilities_included=True,
+            utility_estimate=0,
+            total_bedrooms=2,
+            total_bathrooms=1.0,
+            available_spots=1,
+            current_occupants=1,
+            amenities=[],
+            house_rules=[],
+            images=[],
+            available_from=date.today(),
+            available_until=None,
+            lease_duration="12_months",
+            nearest_transit="BART",
+            transit_walk_mins=8,
+            nearby_universities=[],
+            is_verified=True,
+            status="published",
+        )
+        db_session.add(listing)
+
+        db_session.add(
+            Expense(
+                household_id=uuid.uuid4(),
+                paid_by=seeker.id,
+                description="Rent payment",
+                amount=120000,
+                category="rent",
+                date=date.today(),
+                status="paid",
+            )
+        )
+        db_session.add(
+            MatchInterest(
+                from_user_id=seeker.id,
+                to_listing_id=listing.id,
+                status="accepted",
+            )
+        )
+
+        await record_event(
+            db_session,
+            event_name="search_performed",
+            user_id=seeker.id,
+            source="web",
+            occurred_at=datetime.now(timezone.utc),
+            properties={"city": "San Francisco"},
+        )
+        await record_event(
+            db_session,
+            event_name="interest_sent",
+            user_id=seeker.id,
+            source="web",
+            occurred_at=datetime.now(timezone.utc),
+            properties={"city": "San Francisco"},
+        )
+        await db_session.commit()
+
+        from app.utils.security import create_access_token
+        token = create_access_token({"sub": str(admin.id)})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        resp = await client.get("/api/v1/admin/metrics/investor-insights?days=180", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["window_days"] == 180
+        assert data["revenue"]["total_revenue_cents"] == 120000
+        assert data["revenue"]["mrr_cents"] == 120000
+        assert data["revenue"]["arpu_cents"] == 120000
+        assert len(data["revenue"]["trend"]) == 1
+
+        assert data["conversion"]["funnel"]["search_users"] == 1
+        assert data["conversion"]["funnel"]["interest_users"] == 1
+        assert data["conversion"]["funnel"]["close_users"] == 1
+        assert data["conversion"]["search_to_interest_pct"] == 100.0
+        assert data["conversion"]["interest_to_close_pct"] == 100.0
+
+        sf_growth = next(row for row in data["geography"]["city_growth"] if row["city"] == "San Francisco")
+        assert sf_growth["new_supply"] == 1
+        assert sf_growth["new_demand"] >= 2
