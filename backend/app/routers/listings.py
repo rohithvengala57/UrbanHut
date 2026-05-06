@@ -412,6 +412,7 @@ async def get_listing(
         user_id=current_user.id if current_user else None,
         properties={"listing_id": str(listing_id), "city": listing.city, "rent": listing.rent_monthly},
     )
+    await db.refresh(listing)
 
     response = ListingResponse.model_validate(listing)
 
