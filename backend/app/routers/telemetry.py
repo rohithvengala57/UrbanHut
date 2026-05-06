@@ -180,6 +180,13 @@ ACTIVE_HOUSEHOLD_EVENTS = (
     "chore_completed",
 )
 ACTIVATION_EVENTS = ("chat_message_sent", "mutual_match_created")
+RETENTION_EVENTS = (
+    "chat_message_sent",
+    "mutual_match_created",
+    "expense_created",
+    "chore_completed",
+    "service_booking_created",
+)
 
 
 @router.get("/funnel/daily")
@@ -249,4 +256,119 @@ async def daily_funnel(
             }
             for r in rows
         ],
+    }
+
+
+@router.get("/retention/weekly")
+async def weekly_retention(
+    cohort_weeks: int = Query(default=8, ge=1, le=26),
+    max_age_weeks: int = Query(default=8, ge=1, le=26),
+    city: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Weekly signup cohort retention for Track 2 dashboards.
+
+    Cohorts are users with a `signup_completed` event in the requested window.
+    Retention counts users with at least one follow-up event in RETENTION_EVENTS
+    in each week offset after signup week.
+    """
+    today = date.today()
+    since = today - timedelta(days=(cohort_weeks * 7) - 1)
+    channel = func.coalesce(TelemetryEvent.utm_source, TelemetryEvent.source, "unknown")
+
+    signup_conditions = [
+        TelemetryEvent.event_name == "signup_completed",
+        TelemetryEvent.user_id.is_not(None),
+        TelemetryEvent.event_date >= since,
+    ]
+    if city:
+        signup_conditions.append(TelemetryEvent.city.ilike(f"%{city}%"))
+
+    signup_stmt = (
+        select(
+            TelemetryEvent.user_id,
+            TelemetryEvent.event_date,
+            channel.label("channel"),
+        )
+        .where(*signup_conditions)
+        .order_by(TelemetryEvent.event_date.asc())
+    )
+    signup_rows = (await db.execute(signup_stmt)).all()
+    if not signup_rows:
+        return {
+            "cohort_weeks": cohort_weeks,
+            "max_age_weeks": max_age_weeks,
+            "city_filter": city,
+            "rows": [],
+        }
+
+    first_signup_by_user: dict[uuid.UUID, tuple[date, str]] = {}
+    for row in signup_rows:
+        first_signup_by_user.setdefault(row.user_id, (row.event_date, row.channel))
+
+    user_ids = list(first_signup_by_user.keys())
+    activity_stmt = (
+        select(TelemetryEvent.user_id, TelemetryEvent.event_date)
+        .where(
+            TelemetryEvent.user_id.in_(user_ids),
+            TelemetryEvent.event_name.in_(RETENTION_EVENTS),
+            TelemetryEvent.event_date >= since,
+        )
+        .order_by(TelemetryEvent.event_date.asc())
+    )
+    activity_rows = (await db.execute(activity_stmt)).all()
+    activity_dates_by_user: dict[uuid.UUID, set[date]] = {}
+    for row in activity_rows:
+        activity_dates_by_user.setdefault(row.user_id, set()).add(row.event_date)
+
+    cohorts: dict[tuple[date, str], dict[str, Any]] = {}
+    for user_id, (signup_date, cohort_channel) in first_signup_by_user.items():
+        cohort_start = signup_date - timedelta(days=signup_date.weekday())
+        key = (cohort_start, cohort_channel)
+        if key not in cohorts:
+            cohorts[key] = {
+                "cohort_week_start": cohort_start,
+                "channel": cohort_channel,
+                "cohort_size": 0,
+                "retained": {offset: 0 for offset in range(max_age_weeks + 1)},
+            }
+        cohorts[key]["cohort_size"] += 1
+        cohorts[key]["retained"][0] += 1
+
+        for activity_date in activity_dates_by_user.get(user_id, set()):
+            delta_days = (activity_date - signup_date).days
+            if delta_days < 0:
+                continue
+            week_offset = delta_days // 7
+            if 1 <= week_offset <= max_age_weeks:
+                cohorts[key]["retained"][week_offset] += 1
+
+    rows = []
+    for cohort in sorted(cohorts.values(), key=lambda c: (c["cohort_week_start"], c["channel"])):
+        size = cohort["cohort_size"]
+        retention = []
+        for week in range(max_age_weeks + 1):
+            retained_users = int(cohort["retained"][week])
+            retention.append(
+                {
+                    "week": week,
+                    "retained_users": retained_users,
+                    "retention_pct": round((retained_users / size) * 100, 2) if size else 0.0,
+                }
+            )
+        rows.append(
+            {
+                "cohort_week_start": cohort["cohort_week_start"].isoformat(),
+                "channel": cohort["channel"],
+                "cohort_size": size,
+                "retention": retention,
+            }
+        )
+
+    return {
+        "cohort_weeks": cohort_weeks,
+        "max_age_weeks": max_age_weeks,
+        "city_filter": city,
+        "rows": rows,
     }

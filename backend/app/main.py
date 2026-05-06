@@ -27,6 +27,7 @@ from app.routers import (
     verifications,
     telemetry,
     admin_metrics,
+    admin_management,
 )
 
 # ─── Structured logging setup ─────────────────────────────────────────────────
@@ -330,6 +331,7 @@ app.include_router(saved.router, prefix="/api/v1/saved", tags=["Saved"])
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 app.include_router(telemetry.router, prefix="/api/v1/telemetry", tags=["Telemetry"])
 app.include_router(admin_metrics.router, prefix="/api/v1/admin/metrics", tags=["Admin Metrics"])
+app.include_router(admin_management.router, prefix="/api/v1/admin", tags=["Admin Management"])
 
 log.info("routes_registered", router_count=15)
 
