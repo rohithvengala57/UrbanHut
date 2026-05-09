@@ -4,6 +4,8 @@ import { trackEvent } from "@/lib/analytics";
 import { deleteItem, getItem, setItem } from "@/lib/storage";
 import api from "@/services/api";
 
+const CACHED_USER_KEY = "cached_user";
+
 interface User {
   id: string;
   email: string;
@@ -97,6 +99,43 @@ function checkIsOnboarded(user: User | null): boolean {
   return user?.onboarding_metadata?.steps?.profile_completed ?? false;
 }
 
+function toCachedUser(user: User): User {
+  return {
+    id: user.id,
+    email: user.email,
+    full_name: user.full_name,
+    avatar_url: user.avatar_url,
+    role: user.role,
+    status: user.status,
+    household_id: user.household_id,
+    trust_score: user.trust_score,
+    onboarding_metadata: user.onboarding_metadata,
+    current_city: user.current_city,
+    current_state: user.current_state,
+    occupation: user.occupation,
+    sleep_schedule: user.sleep_schedule,
+    noise_tolerance: user.noise_tolerance,
+    guest_frequency: user.guest_frequency,
+    cleanliness_level: user.cleanliness_level,
+    smoking: user.smoking,
+    drinking: user.drinking,
+    pet_friendly: user.pet_friendly,
+  };
+}
+
+async function cacheUser(user: User): Promise<void> {
+  await setItem(CACHED_USER_KEY, JSON.stringify(toCachedUser(user)));
+}
+
+async function getCachedUser(): Promise<User | null> {
+  try {
+    const cached = await getItem(CACHED_USER_KEY);
+    return cached ? (JSON.parse(cached) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -112,6 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const userResponse = await api.get("/users/me");
     const user = userResponse.data;
+    await cacheUser(user);
     set({ user, isAuthenticated: true, isOnboarded: checkIsOnboarded(user) });
   },
 
@@ -129,6 +169,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const userResponse = await api.get("/users/me");
     const user = userResponse.data;
+    await cacheUser(user);
     set({ user, isAuthenticated: true, isOnboarded: checkIsOnboarded(user) });
     await trackEvent("signup_completed", {
       method: "email_password",
@@ -140,6 +181,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     await deleteItem("access_token");
     await deleteItem("refresh_token");
+    await deleteItem(CACHED_USER_KEY);
     set({ user: null, isAuthenticated: false, isOnboarded: false });
   },
 
@@ -151,13 +193,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
 
+      const cachedUser = await getCachedUser();
+      if (cachedUser) {
+        set({
+          user: cachedUser,
+          isAuthenticated: true,
+          isOnboarded: checkIsOnboarded(cachedUser),
+          isLoading: false,
+        });
+      }
+
       const response = await api.get("/users/me");
       const user = response.data;
+      await cacheUser(user);
       set({ user, isAuthenticated: true, isOnboarded: checkIsOnboarded(user), isLoading: false });
-    } catch {
-      await deleteItem("access_token");
-      await deleteItem("refresh_token");
-      set({ user: null, isAuthenticated: false, isOnboarded: false, isLoading: false });
+    } catch (error: any) {
+      if (error?.response?.status === 401) {
+        await deleteItem("access_token");
+        await deleteItem("refresh_token");
+        await deleteItem(CACHED_USER_KEY);
+        set({ user: null, isAuthenticated: false, isOnboarded: false, isLoading: false });
+        return;
+      }
+
+      const cachedUser = await getCachedUser();
+      if (cachedUser) {
+        set({
+          user: cachedUser,
+          isAuthenticated: true,
+          isOnboarded: checkIsOnboarded(cachedUser),
+          isLoading: false,
+        });
+        return;
+      }
+
+      const token = await getItem("access_token");
+      set({
+        user: null,
+        isAuthenticated: Boolean(token),
+        isOnboarded: Boolean(token),
+        isLoading: false,
+      });
     }
   },
 
@@ -165,6 +241,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const previousUser = get().user;
     const response = await api.patch("/users/me", data);
     const user = response.data as User;
+    await cacheUser(user);
     set({ user, isOnboarded: checkIsOnboarded(user) });
 
     if (!isProfileCompleted(previousUser) && isProfileCompleted(user)) {
@@ -189,6 +266,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     const response = await api.patch("/users/me", { onboarding_metadata });
     const updatedUser = response.data as User;
+    await cacheUser(updatedUser);
     set({ user: updatedUser, isOnboarded: true });
     await trackEvent("onboarding_completed", { user_id: updatedUser.id });
   },

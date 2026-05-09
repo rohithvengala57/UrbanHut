@@ -15,11 +15,33 @@ import Svg, { Defs, LinearGradient, Rect, Stop, Circle } from "react-native-svg"
 
 import { Button } from "@/components/ui/Button";
 import { GradientCard } from "@/components/ui/GradientCard";
+import { getItem } from "@/lib/storage";
+import { useAuthStore } from "@/stores/authStore";
 
 const { width } = Dimensions.get("window");
 const URBAN_HUT_LOGO = require("@/assets/urban-hut-mark.png");
 
 export default function LandingScreen() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isOnboarded = useAuthStore((s) => s.isOnboarded);
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    router.replace(isOnboarded ? "/(tabs)/home" : "/onboarding/welcome");
+  }, [isAuthenticated, isOnboarded]);
+
+  React.useEffect(() => {
+    let mounted = true;
+    getItem("access_token").then((token) => {
+      if (mounted && token) {
+        router.replace("/(tabs)/home");
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <SafeAreaView className="flex-1 bg-white" style={styles.screen}>
       <ScrollView

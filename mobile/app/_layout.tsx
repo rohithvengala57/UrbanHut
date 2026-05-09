@@ -68,7 +68,6 @@ function RootLayoutInner() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="(admin)" />
         <Stack.Screen name="listing/[id]" options={{ headerShown: true, title: "Listing" }} />
         <Stack.Screen name="listing/create" options={{ headerShown: true, title: "Post a Listing", presentation: "modal" }} />
         <Stack.Screen name="listing/my-listings" options={{ headerShown: true, title: "My Listings" }} />

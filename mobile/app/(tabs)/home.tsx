@@ -5,11 +5,11 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Keyboard,
   Modal,
   Platform,
+  RefreshControl,
   ScrollView,
   Switch,
   Text,
@@ -577,11 +577,8 @@ export default function HomeScreen() {
   const isEmptyResults = !isLoading && !isError && sortedListings.length === 0;
   const isFilteredEmpty = isEmptyResults && hasActiveFilters;
 
-  /* ================================================================ */
-  return (
-    <View className="flex-1 bg-slate-50">
-      {/* ============ Header ============ */}
-      <View className="bg-white px-4 pt-6 pb-4">
+  const headerContent = (
+    <View className="bg-white px-4 pt-6 pb-4">
         <View className="flex-row items-center justify-between mb-5">
           <View className="items-start">
             <Image
@@ -765,82 +762,108 @@ export default function HomeScreen() {
           </ScrollView>
         )}
       </View>
+  );
 
-      {/* ============ Content ============ */}
-      {isLoading ? (
-        <SkeletonLoader count={4} style={{ padding: 16 }} />
-      ) : isError ? (
-        /* API error state */
-        <View className="flex-1 items-center justify-center px-8">
-          <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
-            <Feather name="wifi-off" size={28} color="#ef4444" />
-          </View>
-          <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load listings</Text>
-          <Text className="text-slate-400 text-sm text-center mt-2">
-            Check your connection and try again.
-          </Text>
-          <TouchableOpacity
-            onPress={() => refetch()}
-            className="mt-6 bg-[#10b981] rounded-2xl px-8 py-3 flex-row items-center gap-2"
-          >
-            <Feather name="refresh-cw" size={16} color="#fff" />
-            <Text className="text-white font-semibold">Tap to Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : viewMode === "list" ? (
-        <FlatList
-          data={sortedListings}
-          keyExtractor={(item: any) => item.id}
-          renderItem={({ item }: { item: any }) => <ListingCard listing={item} />}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          onRefresh={refetch}
-          refreshing={isRefetching}
-          ListHeaderComponent={
-            <View>
-              <OnboardingChecklist />
-              {/* Smart insight cards */}
-              {/* <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                className="mb-5"
-                contentContainerStyle={{ paddingRight: 4 }}
-              >
-                {INSIGHT_CARDS.map(({ key, ...cardProps }) => (
-                  <InsightCard key={key} {...cardProps} />
-                ))}
-              </ScrollView> */}
-            </View>
+  const emptyContent = isFilteredEmpty ? (
+    <View className="items-center justify-center py-16 px-8">
+      <Feather name="search" size={48} color="#cbd5e1" />
+      <Text className="text-slate-600 mt-4 text-base font-semibold text-center">No listings match your filters</Text>
+      <Text className="text-slate-400 text-sm text-center mt-1">Try broadening your search or clearing some filters.</Text>
+      <TouchableOpacity
+        onPress={() => { clearFilters(); setCityText(""); }}
+        className="mt-5 border border-slate-300 rounded-2xl px-6 py-2.5"
+      >
+        <Text className="text-slate-600 font-semibold">Clear Filters</Text>
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View className="items-center justify-center py-20">
+      <Feather name="inbox" size={48} color="#cbd5e1" />
+      <Text className="text-slate-400 mt-4 text-base">No listings found</Text>
+      <Text className="text-slate-400 text-sm">Try adjusting your search</Text>
+    </View>
+  );
+
+  /* ================================================================ */
+  return (
+    <View className="flex-1 bg-slate-50">
+      {viewMode === "list" ? (
+        <ScrollView
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor="#10b981"
+            />
           }
-          ListEmptyComponent={
-            isFilteredEmpty ? (
-              /* Filtered-empty state: distinct from blank */
-              <View className="items-center justify-center py-16 px-8">
-                <Feather name="search" size={48} color="#cbd5e1" />
-                <Text className="text-slate-600 mt-4 text-base font-semibold text-center">No listings match your filters</Text>
-                <Text className="text-slate-400 text-sm text-center mt-1">Try broadening your search or clearing some filters.</Text>
+          contentContainerStyle={{ paddingBottom: 100 }}
+        >
+          {headerContent}
+
+          <View className="px-4 pt-4">
+            {!isLoading && !isError && <OnboardingChecklist />}
+
+            {isLoading ? (
+              <SkeletonLoader count={4} />
+            ) : isError ? (
+              <View className="items-center justify-center px-8 py-20">
+                <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+                  <Feather name="wifi-off" size={28} color="#ef4444" />
+                </View>
+                <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load listings</Text>
+                <Text className="text-slate-400 text-sm text-center mt-2">
+                  Check your connection and try again.
+                </Text>
                 <TouchableOpacity
-                  onPress={() => { clearFilters(); setCityText(""); }}
-                  className="mt-5 border border-slate-300 rounded-2xl px-6 py-2.5"
+                  onPress={() => refetch()}
+                  className="mt-6 bg-[#10b981] rounded-2xl px-8 py-3 flex-row items-center gap-2"
                 >
-                  <Text className="text-slate-600 font-semibold">Clear Filters</Text>
+                  <Feather name="refresh-cw" size={16} color="#fff" />
+                  <Text className="text-white font-semibold">Tap to Retry</Text>
                 </TouchableOpacity>
               </View>
+            ) : sortedListings.length > 0 ? (
+              sortedListings.map((item: any) => (
+                <ListingCard key={item.id} listing={item} compact />
+              ))
             ) : (
-              /* Generic empty */
-              <View className="items-center justify-center py-20">
-                <Feather name="inbox" size={48} color="#cbd5e1" />
-                <Text className="text-slate-400 mt-4 text-base">No listings found</Text>
-                <Text className="text-slate-400 text-sm">Try adjusting your search</Text>
-              </View>
-            )
-          }
-        />
+              emptyContent
+            )}
+          </View>
+        </ScrollView>
       ) : (
-        <MapWithErrorBoundary
-          listings={markersData}
-          onPress={(id: string) => router.push(`/listing/${id}`)}
-          onSwitchToList={() => setViewMode("list")}
-        />
+        <>
+          {headerContent}
+          {isLoading ? (
+            <SkeletonLoader count={4} style={{ padding: 16 }} />
+          ) : isError ? (
+            <View className="flex-1 items-center justify-center px-8">
+              <View className="w-16 h-16 bg-red-50 rounded-full items-center justify-center mb-4">
+                <Feather name="wifi-off" size={28} color="#ef4444" />
+              </View>
+              <Text className="text-slate-800 font-bold text-lg text-center">Couldn't load listings</Text>
+              <Text className="text-slate-400 text-sm text-center mt-2">
+                Check your connection and try again.
+              </Text>
+              <TouchableOpacity
+                onPress={() => refetch()}
+                className="mt-6 bg-[#10b981] rounded-2xl px-8 py-3 flex-row items-center gap-2"
+              >
+                <Feather name="refresh-cw" size={16} color="#fff" />
+                <Text className="text-white font-semibold">Tap to Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <MapWithErrorBoundary
+              listings={markersData}
+              onPress={(id: string) => router.push(`/listing/${id}`)}
+              onSwitchToList={() => setViewMode("list")}
+            />
+          )}
+        </>
       )}
 
       {/* FAB */}

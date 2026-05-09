@@ -1,19 +1,22 @@
-import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { useEffect } from "react";
 import { Platform } from "react-native";
 
 import api from "@/services/api";
 import { useAuthStore } from "@/stores/authStore";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
-
 async function registerForPushNotificationsAsync(): Promise<string | null> {
+  if (Constants.appOwnership === "expo") return null;
+
+  const Notifications = await import("expo-notifications");
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+
   const { status: existing } = await Notifications.getPermissionsAsync();
   let finalStatus = existing;
 

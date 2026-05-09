@@ -6,11 +6,12 @@ import { useAuthStore } from "@/stores/authStore";
 export default function AuthLayout() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
   if (isLoading) return null;
 
   if (isAuthenticated) {
-    return <Redirect href="/(tabs)/home" />;
+    return <Redirect href={isOnboarded ? "/(tabs)/home" : "/onboarding/welcome"} />;
   }
 
   return (

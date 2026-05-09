@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "scheme": "urbanhut",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "backgroundColor": "#0ea5e9",
       "resizeMode": "contain"

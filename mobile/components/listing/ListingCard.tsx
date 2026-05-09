@@ -25,9 +25,10 @@ interface ListingCardProps {
   };
   hostTrustScore?: number;
   compatibility?: number;
+  compact?: boolean;
 }
 
-export function ListingCard({ listing, hostTrustScore, compatibility }: ListingCardProps) {
+export function ListingCard({ listing, hostTrustScore, compatibility, compact = false }: ListingCardProps) {
   const scaleAnim = React.useRef(new Animated.Value(1)).current;
 
   const handlePressIn = () => {
@@ -46,15 +47,15 @@ export function ListingCard({ listing, hostTrustScore, compatibility }: ListingC
   const occupancyLabel = `${listing.current_occupants}/${listing.available_spots + listing.current_occupants} occupants`;
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }} className="mb-6">
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }} className={compact ? "mb-3" : "mb-6"}>
       <TouchableOpacity
-        className="bg-white rounded-[32px] overflow-hidden border border-slate-100"
+        className={`${compact ? "rounded-3xl" : "rounded-[32px]"} bg-white overflow-hidden border border-slate-100`}
         style={{
           shadowColor: "#0f172a",
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.08,
-          shadowRadius: 24,
-          elevation: 8,
+          shadowOffset: { width: 0, height: compact ? 5 : 8 },
+          shadowOpacity: compact ? 0.06 : 0.08,
+          shadowRadius: compact ? 16 : 24,
+          elevation: compact ? 5 : 8,
         }}
         onPress={() => router.push(`/listing/${listing.id}`)}
         onPressIn={handlePressIn}
@@ -62,7 +63,7 @@ export function ListingCard({ listing, hostTrustScore, compatibility }: ListingC
         activeOpacity={1}
       >
         {/* Image Section */}
-        <View className="h-64 bg-slate-200">
+        <View className={`${compact ? "h-32" : "h-64"} bg-slate-200`}>
           {listing.images.length > 0 ? (
             <Image
               source={{ uri: listing.images[0] }}
@@ -71,47 +72,47 @@ export function ListingCard({ listing, hostTrustScore, compatibility }: ListingC
             />
           ) : (
             <View className="flex-1 items-center justify-center bg-slate-100">
-              <Feather name="home" size={48} color="#94a3b8" />
+              <Feather name="home" size={compact ? 30 : 48} color="#94a3b8" />
             </View>
           )}
 
           {/* Top badges */}
-          <View className="absolute top-4 left-4 right-4 flex-row justify-between items-center">
+          <View className={`absolute ${compact ? "top-3 left-3 right-3" : "top-4 left-4 right-4"} flex-row justify-between items-center`}>
             {listing.is_verified ? (
-              <View className="bg-[#047857] rounded-full px-3 py-1.5 flex-row items-center gap-1.5 shadow-sm">
+              <View className={`${compact ? "px-2.5 py-1" : "px-3 py-1.5"} bg-[#047857] rounded-full flex-row items-center gap-1.5 shadow-sm`}>
                 <Feather name="check-circle" size={12} color="#fff" />
                 <Text className="text-white text-[11px] font-bold uppercase tracking-wider">Verified</Text>
               </View>
             ) : (
               <View />
             )}
-            <TouchableOpacity className="w-10 h-10 items-center justify-center">
-              <Feather name="heart" size={24} color="#fff" />
+            <TouchableOpacity className={`${compact ? "w-7 h-7" : "w-10 h-10"} items-center justify-center`}>
+              <Feather name="heart" size={compact ? 19 : 24} color="#fff" />
             </TouchableOpacity>
           </View>
 
           {/* Carousel Dots */}
-          <View className="absolute bottom-4 left-0 right-0 flex-row justify-center gap-1.5">
+          <View className={`absolute ${compact ? "bottom-3" : "bottom-4"} left-0 right-0 flex-row justify-center gap-1.5`}>
             {[0, 1, 2, 3, 4].map((i) => (
               <View
                 key={i}
-                className={`h-2 w-2 rounded-full ${i === 0 ? "bg-white w-4" : "bg-white/60"}`}
+                className={`${compact ? "h-1.5 w-1.5" : "h-2 w-2"} rounded-full ${i === 0 ? compact ? "bg-white w-3" : "bg-white w-4" : "bg-white/60"}`}
               />
             ))}
           </View>
         </View>
 
         {/* Info Section */}
-        <View className="p-5">
+        <View className={compact ? "p-3.5" : "p-5"}>
           {/* Price & Room Type Row */}
           <View className="flex-row items-center justify-between mb-1">
             <View className="flex-row items-baseline gap-1.5">
-              <Text className="text-2xl font-extrabold text-[#10b981]">
+              <Text className={`${compact ? "text-lg" : "text-2xl"} font-extrabold text-[#10b981]`}>
                 {formatCurrency(listing.rent_monthly)}
               </Text>
-              <Text className="text-slate-500 font-medium text-sm">/mo</Text>
+              <Text className={`${compact ? "text-xs" : "text-sm"} text-slate-500 font-medium`}>/mo</Text>
             </View>
-            <View className="bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+            <View className={`${compact ? "px-2.5 py-1" : "px-3 py-1"} bg-emerald-50 rounded-full border border-emerald-100`}>
               <Text className="text-emerald-700 text-[11px] font-bold uppercase">
                 {roomTypeLabels[listing.room_type] || listing.room_type}
               </Text>
@@ -120,51 +121,51 @@ export function ListingCard({ listing, hostTrustScore, compatibility }: ListingC
 
           {/* Deposit Row */}
           {listing.security_deposit && (
-            <Text className="text-slate-400 text-xs font-medium mb-2">
+              <Text className={`text-slate-400 text-xs font-medium ${compact ? "mb-0.5" : "mb-2"}`}>
               {formatCurrency(listing.security_deposit)} deposit
             </Text>
           )}
 
           {/* Title */}
-          <Text className="text-lg font-bold text-slate-900 mb-2" numberOfLines={1}>
+          <Text className={`${compact ? "text-[15px] mb-1" : "text-lg mb-2"} font-bold text-slate-900`} numberOfLines={1}>
             {listing.title}
           </Text>
 
           {/* Location */}
-          <View className="flex-row items-center gap-1.5 mb-3">
-            <Feather name="map-pin" size={14} color="#64748b" />
-            <Text className="text-slate-500 text-sm font-medium">
+          <View className={`flex-row items-center gap-1.5 ${compact ? "mb-1.5" : "mb-3"}`}>
+            <Feather name="map-pin" size={compact ? 12 : 14} color="#64748b" />
+            <Text className={`${compact ? "text-xs" : "text-sm"} text-slate-500 font-medium`} numberOfLines={1}>
               {listing.city}, {listing.state} {listing.zip_code || ""}
             </Text>
           </View>
 
           {/* Stats Row */}
-          <View className="flex-row items-center gap-4 mb-5 pb-5 border-b border-slate-50">
+          <View className={`flex-row items-center gap-3 ${compact ? "mb-2.5 pb-2.5" : "mb-5 pb-5"} border-b border-slate-50`}>
             <View className="flex-row items-center gap-1.5">
-              <Feather name="grid" size={14} color="#64748b" />
-              <Text className="text-slate-500 text-sm font-medium">{listing.total_bedrooms}bd</Text>
+              <Feather name="grid" size={compact ? 13 : 14} color="#64748b" />
+              <Text className={`${compact ? "text-xs" : "text-sm"} text-slate-500 font-medium`}>{listing.total_bedrooms}bd</Text>
             </View>
             <View className="flex-row items-center gap-1.5">
-              <Feather name="droplet" size={14} color="#64748b" />
-              <Text className="text-slate-500 text-sm font-medium">{listing.total_bathrooms}ba</Text>
+              <Feather name="droplet" size={compact ? 13 : 14} color="#64748b" />
+              <Text className={`${compact ? "text-xs" : "text-sm"} text-slate-500 font-medium`}>{listing.total_bathrooms}ba</Text>
             </View>
             <View className="flex-row items-center gap-1.5">
-              <Feather name="users" size={14} color="#64748b" />
-              <Text className="text-slate-500 text-sm font-medium">{occupancyLabel}</Text>
+              <Feather name="users" size={compact ? 13 : 14} color="#64748b" />
+              <Text className={`${compact ? "text-xs" : "text-sm"} text-slate-500 font-medium`}>{occupancyLabel}</Text>
             </View>
           </View>
 
           {/* Match & Trust Row */}
           <View className="flex-row items-center">
-            <View className="flex-row items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-2xl border border-emerald-100">
-              <Feather name="zap" size={14} color="#10b981" />
+            <View className={`${compact ? "px-2.5 py-1" : "px-3 py-1.5"} flex-row items-center gap-2 bg-emerald-50 rounded-2xl border border-emerald-100`}>
+              <Feather name="zap" size={compact ? 12 : 14} color="#10b981" />
               <Text className="text-emerald-700 text-xs font-bold">
                 {compatibility || 76}% Match
               </Text>
             </View>
-            <View className="mx-3 h-4 w-[1px] bg-slate-200" />
+            <View className={`${compact ? "mx-2" : "mx-3"} h-4 w-[1px] bg-slate-200`} />
             <View className="flex-row items-center gap-2">
-              <Feather name="shield" size={14} color="#10b981" />
+              <Feather name="shield" size={compact ? 12 : 14} color="#10b981" />
               <Text className="text-slate-600 text-xs font-semibold">
                 <Text className="text-[#10b981] font-bold">{hostTrustScore || 4.6}</Text> Avg Trust
               </Text>
