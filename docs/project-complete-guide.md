@@ -984,9 +984,13 @@ Support post-move-in coordination.
 3. Invite code can be generated and shared.
 4. Household becomes the hub for expenses and chores.
 
+### Detailed documentation
+
+See [docs/household-module-flows.md](household-module-flows.md) for end-to-end UX flows and diagrams.
+
 ### Product maturity
 
-Good foundational household workspace.
+Solid household workspace with automated scheduling and ledger tracking.
 
 ---
 
@@ -1008,18 +1012,18 @@ Track shared bills and who owes whom.
 - `GET /api/v1/expenses/balances`
 - `POST /api/v1/expenses/{expense_id}/settle`
 - `GET /api/v1/expenses/{expense_id}`
+- `POST /api/v1/expenses/{expense_id}/receipt-upload-url` (UH-502)
 
 ### Supported behavior
 
-- create expense
-- split expense
-- inspect pending splits
-- see balances
+- create expense (Equal or Exact splits)
+- inspect pending splits and net balances
 - settle owed items
+- attach and view receipts (S3 integration)
 
 ### Product maturity
 
-Useful MVP. Enough to be practical, though future improvements could include receipts, disputes, exports, and history depth.
+Practical and scalable. Future depth: dispute resolution and monthly PDF exports.
 
 ---
 
@@ -1046,8 +1050,18 @@ Distribute household labor fairly.
 - `GET /api/v1/chores/schedule`
 - `POST /api/v1/chores/schedule/{assignment_id}/complete`
 - `GET /api/v1/chores/points`
+- `POST /api/v1/chores/remind` (UH-602)
 
-### Chore scheduler design
+### Supported behavior
+
+- Define recurring chore templates with weights.
+- Individual member constraints (preferences, restrictions, fixed days).
+- Automated week-ahead schedule generation using constraint-satisfaction algorithm.
+- Points and performance tracking linked to Trust Score.
+
+### Product maturity
+
+Highly functional. Outperforms basic list-based alternatives with its fairness algorithm.
 
 `backend/app/services/chore_scheduler.py`
 
