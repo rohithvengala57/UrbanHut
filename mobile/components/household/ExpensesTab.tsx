@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -49,6 +50,7 @@ export function ExpensesTab({ members }: Props) {
   });
   const [exactSplits, setExactSplits] = useState<Record<string, string>>({});
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState<string | null>(null);
 
   const {
     data: expenses,
@@ -91,6 +93,58 @@ export function ExpensesTab({ members }: Props) {
           }),
       },
     ]);
+  };
+
+  const handleUploadReceipt = async (expenseId: string) => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission required", "Please allow access to your photo library.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+    });
+
+    if (result.canceled || !result.assets.length) return;
+
+    const asset = result.assets[0];
+    const filename = asset.fileName || `receipt_${Date.now()}.jpg`;
+
+    setUploadingReceipt(expenseId);
+    try {
+      // 1. Get presigned URL
+      const { upload_url, s3_key } = await receiptUploadUrl.mutateAsync({
+        expenseId,
+        filename,
+        contentType: asset.mimeType || "image/jpeg",
+      });
+
+      // 2. Upload to S3
+      const response = await fetch(asset.uri);
+      const blob = await response.blob();
+
+      await fetch(upload_url, {
+        method: "PUT",
+        body: blob,
+        headers: {
+          "Content-Type": asset.mimeType || "image/jpeg",
+        },
+      });
+
+      // 3. Link to expense
+      await attachReceipt.mutateAsync({ expenseId, s3Key: s3_key });
+
+      Alert.alert("Success", "Receipt attached successfully!");
+      refetchExpenses();
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      Alert.alert("Upload Failed", err.message || "Could not upload receipt");
+    } finally {
+      setUploadingReceipt(null);
+    }
   };
 
   const handleAdd = () => {
@@ -425,26 +479,35 @@ export function ExpensesTab({ members }: Props) {
                     <TouchableOpacity
                       onPress={() => {
                         if (expense.receipt_url) {
-                          Alert.alert("Receipt", "Receipt is attached to this expense.");
+                          Alert.alert("Receipt", "A receipt is already attached.", [
+                            { text: "View", onPress: () => Alert.alert("View Receipt", "Receipt viewer coming soon!") },
+                            { text: "Replace", onPress: () => handleUploadReceipt(expense.id) },
+                            { text: "Close", style: "cancel" },
+                          ]);
                         } else {
-                          Alert.alert(
-                            "Add Receipt",
-                            "To attach a receipt, use the Upload Receipt option.",
-                            [{ text: "OK" }]
-                          );
+                          handleUploadReceipt(expense.id);
                         }
                       }}
                       className="flex-row items-center gap-1"
+                      disabled={uploadingReceipt === expense.id}
                     >
-                      <Feather
-                        name="file-text"
-                        size={13}
-                        color={expense.receipt_url ? "#22c55e" : "#cbd5e1"}
-                      />
+                      {uploadingReceipt === expense.id ? (
+                        <ActivityIndicator size="small" color="#0ea5e9" />
+                      ) : (
+                        <Feather
+                          name="file-text"
+                          size={13}
+                          color={expense.receipt_url ? "#22c55e" : "#cbd5e1"}
+                        />
+                      )}
                       <Text
                         className={`text-xs ${expense.receipt_url ? "text-green-600" : "text-slate-300"}`}
                       >
-                        {expense.receipt_url ? "Receipt" : "No receipt"}
+                        {uploadingReceipt === expense.id
+                          ? "Uploading..."
+                          : expense.receipt_url
+                            ? "Receipt"
+                            : "Add Receipt"}
                       </Text>
                     </TouchableOpacity>
                   </View>
